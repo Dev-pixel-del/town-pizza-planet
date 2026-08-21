@@ -1,4 +1,5 @@
 require('dotenv').config();
+const puppeteer = require('puppeteer');
 const { Client, LocalAuth, RemoteAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
@@ -49,7 +50,9 @@ function buildClient() {
       '--disable-renderer-backgrounding',
     ],
   };
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
+  console.log(`🌐 Chrome executable: ${executablePath}`);
+  puppeteerConfig.executablePath = executablePath;
 
   return new Client({
     authStrategy: buildAuthStrategy(),
