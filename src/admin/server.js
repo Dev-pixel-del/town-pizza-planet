@@ -86,6 +86,17 @@ app.put('/api/orders/:orderId/status', requireAuth, async (req, res) => {
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/qr', (req, res) => res.sendFile(path.join(__dirname, 'public', 'qr.html')));
 
+app.get('/api/qr', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.json({
+    status: global.__TPP_WHATSAPP_STATUS || 'starting',
+    ready: global.__TPP_WHATSAPP_READY === true,
+    qr: global.__TPP_QR_DATA_URL || null
+  });
+});
+
 function setWhatsAppClient(client) { whatsappClient = client; }
 
 module.exports = { app, setWhatsAppClient };
