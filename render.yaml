@@ -3,7 +3,7 @@ services:
     name: town-pizza-planet
     runtime: node
     plan: free
-    buildCommand: npm install --include=optional && PUPPETEER_CACHE_DIR=.puppeteer-cache npx puppeteer browsers install chrome
+    buildCommand: npm install && PUPPETEER_CACHE_DIR=/opt/render/project/src/.puppeteer-cache npx puppeteer browsers install chrome
     startCommand: node src/server.js
     healthCheckPath: /healthz
     autoDeploy: true
@@ -13,4 +13,4 @@ services:
       - key: NPM_CONFIG_PRODUCTION
         value: "false"
       - key: PUPPETEER_CACHE_DIR
-        value: .puppeteer-cache
+        value: /opt/render/project/src/.puppeteer-cache
