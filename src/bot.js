@@ -1,7 +1,7 @@
 require('dotenv').config();
-const puppeteer = require('puppeteer');
 const { Client, LocalAuth, RemoteAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const QRCode = require('qrcode');
 const { MongoStore } = (() => {
   try { return require('wwebjs-mongo'); } catch { return { MongoStore: null }; }
 })();
@@ -17,6 +17,8 @@ const OPEN_HOUR = Number(process.env.OPEN_HOUR || 10);
 const CLOSE_HOUR = Number(process.env.CLOSE_HOUR || 23);
 
 let client;
+global.__TPP_QR_DATA_URL = null;
+global.__TPP_WHATSAPP_STATUS = 'starting';
 
 function buildAuthStrategy() {
   const mongoose = getMongoose();
@@ -47,9 +49,7 @@ function buildClient() {
       '--disable-renderer-backgrounding',
     ],
   };
-  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath();
-  console.log(`🌐 Chrome executable: ${executablePath}`);
-  puppeteerConfig.executablePath = executablePath;
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) puppeteerConfig.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
 
   return new Client({
     authStrategy: buildAuthStrategy(),
@@ -62,23 +62,37 @@ async function startWhatsApp() {
 
   client.on('qr', qr => {
     global.__TPP_WHATSAPP_READY = false;
-    console.log('\n📱 Scan this QR code with WhatsApp:\n');
+    global.__TPP_WHATSAPP_STATUS = 'awaiting_qr';
+    QRCode.toDataURL(qr, { width: 520, margin: 2, errorCorrectionLevel: 'M' })
+      .then(dataUrl => { global.__TPP_QR_DATA_URL = dataUrl; })
+      .catch(err => console.error('QR image generation failed:', err.message));
+    console.log('\n📱 New WhatsApp QR generated. Open /qr in a browser to scan it.\n');
     qrcode.generate(qr, { small: true });
-    console.log('\nWhatsApp → Linked Devices → Link a Device\n');
   });
 
   client.on('ready', () => {
     global.__TPP_WHATSAPP_READY = true;
+    global.__TPP_WHATSAPP_STATUS = 'ready';
+    global.__TPP_QR_DATA_URL = null;
     console.log(`✅ ${STORE_NAME} WhatsApp bot is LIVE as ${client.info.wid.user}`);
+  });
+
+  client.on('authenticated', () => {
+    global.__TPP_WHATSAPP_STATUS = 'authenticated';
+    console.log('✅ WhatsApp authenticated. Waiting for client ready...');
   });
 
   client.on('auth_failure', msg => {
     global.__TPP_WHATSAPP_READY = false;
+    global.__TPP_WHATSAPP_STATUS = 'auth_failure';
+    global.__TPP_QR_DATA_URL = null;
     console.error('❌ WhatsApp authentication failed:', msg);
   });
 
   client.on('disconnected', reason => {
     global.__TPP_WHATSAPP_READY = false;
+    global.__TPP_WHATSAPP_STATUS = 'disconnected';
+    global.__TPP_QR_DATA_URL = null;
     console.error('⚠️ WhatsApp disconnected:', reason);
     setTimeout(() => client.initialize().catch(err => console.error('Reconnect failed:', err.message)), 5000);
   });
