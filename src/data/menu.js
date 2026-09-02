@@ -1,122 +1,107 @@
-// Town Pizza Planet — authoritative menu
-// Prices are the final customer-facing prices supplied by the owner.
+// Town Pizza Planet — final button/catalogue menu data.
+// Customer-facing image files live in:
+//   public/product-images/P1.jpg ... P10.jpg
+// Pizza pricing rule: show ONE final price = highest legacy price.
 
 const EXTRA_CHEESE_PRICE = 30;
 
 const pizzas = [
-  { id: 'P1', name: 'Margareta Pizza', price: 129, aliases: ['margareta', 'margherita', 'margarita'] },
-  { id: 'P2', name: 'Classic Pizza', price: 139, aliases: ['classic pizza', 'classic'] },
-  { id: 'P3', name: 'Mushroom Pizza', price: 199, aliases: ['mushroom', 'mushroom pizza'] },
-  { id: 'P4', name: 'Sweet Corn Pizza', price: 229, aliases: ['sweet corn', 'sweet corn pizza', 'corn pizza'] },
-  { id: 'P5', name: 'Baby Corn Pizza', price: 229, aliases: ['baby corn', 'baby corn pizza'] },
-  { id: 'P6', name: 'Mexican Pizza', price: 179, aliases: ['mexican', 'mexican pizza'] },
-  { id: 'P7', name: 'Paneer Pizza', price: 269, aliases: ['paneer pizza'] },
-  { id: 'P8', name: 'Peri Peri Chicken Pizza', price: 349, aliases: ['peri peri', 'peri peri chicken', 'peri peri chicken pizza'] },
-  { id: 'P9', name: 'Barbeque Chicken Pizza', price: 399, aliases: ['barbeque', 'barbecue', 'bbq', 'bbq chicken', 'barbeque chicken pizza'] },
-  { id: 'P10', name: 'Paneer Makhani Pizza', price: 289, aliases: ['paneer makhani pizza'] },
-];
-
-const pizzaAddons = [
-  { id: 'PA1', name: 'Extra Cheese', price: 30, aliases: ['extra cheese', 'cheese'] },
+  { id: 'P1', name: 'Margherita Pizza', prices: { regular: 99, large: 129 }, image: 'P1.jpg' },
+  { id: 'P2', name: 'Classic Pizza', prices: { regular: 139 }, image: 'P2.jpg' },
+  { id: 'P3', name: 'Mushroom Pizza', prices: { regular: 169, large: 199 }, image: 'P3.jpg' },
+  { id: 'P4', name: 'Sweet Corn Pizza', prices: { regular: 179, large: 229 }, image: 'P4.jpg' },
+  { id: 'P5', name: 'Baby Corn Pizza', prices: { regular: 179, large: 229 }, image: 'P5.jpg' },
+  { id: 'P6', name: 'Mexican Pizza', prices: { regular: 149, large: 179 }, image: 'P6.jpg' },
+  { id: 'P7', name: 'Paneer Pizza', prices: { regular: 229, large: 269 }, image: 'P7.jpg' },
+  { id: 'P8', name: 'Peri Peri Chicken Pizza', prices: { regular: 299, large: 349 }, image: 'P8.jpg' },
+  { id: 'P9', name: 'Barbeque Chicken Pizza', prices: { regular: 349, large: 399 }, image: 'P9.jpg' },
+  { id: 'P10', name: 'Paneer Makhani Pizza', prices: { regular: 249, large: 289 }, image: 'P10.jpg' },
 ];
 
 const burgers = [
-  { id: 'B1', name: 'Veg Burger', price: 99, aliases: ['veg burger', 'vegetable burger'] },
-  { id: 'B2', name: 'Cheez Burger', price: 129, aliases: ['cheez burger', 'cheese burger'] },
-  { id: 'B3', name: 'Double Lamb Burger', price: 149, aliases: ['double lamb', 'lamb burger'] },
-  { id: 'B4', name: 'Chicken Burger', price: 149, aliases: ['chicken burger'] },
+  { id: 'B1', name: 'Veg Burger', price: 99, image: 'B1.jpg' },
+  { id: 'B2', name: 'Cheez Burger', price: 129, image: 'B2.jpg' },
+  { id: 'B3', name: 'Double Lamb Burger', price: 149, image: 'B3.jpg' },
+  { id: 'B4', name: 'Chicken Burger', price: 149, image: 'B4.jpg' },
 ];
 
-const sandwiches = [
-  { id: 'S2', name: 'Masala Sandwich', price: 99, aliases: ['masala sandwich'] },
-  { id: 'S4', name: 'Paneer Tikka Sandwich', price: 129, aliases: ['paneer tikka sandwich', 'paneer sandwich'] },
-  { id: 'S6', name: 'Chicken Sandwich', price: 149, aliases: ['chicken sandwich'] },
-  { id: 'S7', name: 'Paneer Makhani', price: 169, aliases: ['paneer makhani'], subcategory: 'sandwiches' },
-];
-
-const sides = [
-  { id: 'S1', name: 'French Fries (Regular)', price: 80, aliases: ['regular fries', 'fries', 'french fries regular'] },
-  { id: 'S3', name: 'French Fries (Large)', price: 149, aliases: ['large fries', 'french fries large'] },
-  { id: 'S5', name: 'Garlic Bread', price: 129, aliases: ['garlic bread'] },
+const sandwichesAndSides = [
+  { id: 'S1', name: 'French Fries (Regular)', price: 80, image: 'S1.jpg' },
+  { id: 'S2', name: 'Masala Sandwich', price: 99, image: 'S2.jpg' },
+  { id: 'S3', name: 'French Fries (Large)', price: 149, image: 'S3.jpg' },
+  { id: 'S4', name: 'Paneer Tikka Sandwich', price: 129, image: 'S4.jpg' },
+  { id: 'S5', name: 'Garlic Bread', price: 129, image: 'S5.jpg' },
+  { id: 'S6', name: 'Chicken Sandwich', price: 149, image: 'S6.jpg' },
+  { id: 'S7', name: 'Paneer Makhani', price: 169, image: 'S7.jpg' },
+  { id: 'S8', name: 'Regular Cheese Loaded Fries', price: 119, image: 'S8.jpg' },
+  { id: 'S9', name: 'Large Cheese Loaded Fries', price: 189, image: 'S9.jpg' },
 ];
 
 const milkshakes = [
-  { id: 'M1', name: 'Vanilla Shake', price: 139, aliases: ['vanilla shake', 'vanilla'] },
-  { id: 'M2', name: 'Strawberry Shake', price: 139, aliases: ['strawberry shake', 'strawberry'] },
-  { id: 'M3', name: 'Apple Shake', price: 139, aliases: ['apple shake', 'apple'] },
-  { id: 'M4', name: 'Chocolate Shake', price: 139, aliases: ['chocolate shake', 'chocolate'] },
-  { id: 'M5', name: 'Pineapple Shake', price: 139, aliases: ['pineapple shake', 'pineapple'] },
-  { id: 'M6', name: 'Orange Shake', price: 139, aliases: ['orange shake', 'orange'] },
-  { id: 'M7', name: 'Cold Coffee', price: 80, aliases: ['cold coffee', 'coffee'] },
-];
-
-const drinks = [
-  { id: 'D1', name: 'Sprite', price: 25, aliases: ['sprite', 'स्प्राइट', 'ಸ್ಪ್ರೈಟ್'] },
-  { id: 'D2', name: 'Mountain Dew', price: 25, aliases: ['mountain dew', 'mountain', 'dew', 'माउंटेन ड्यू', 'ಮೌಂಟನ್ ಡ್ಯೂ'] },
-  { id: 'D3', name: 'Water 500 ml', price: 10, aliases: ['water 500', '500 ml water', '500ml water', 'small water', 'half litre water', 'पानी 500 ml', '500 ml पानी', '500 ಮಿಲಿ ನೀರು'] },
-  { id: 'D4', name: 'Water 1 litre', price: 20, aliases: ['water 1 litre', '1 litre water', '1l water', 'one litre water', 'large water', 'पानी 1 लीटर', '1 लीटर पानी', '1 ಲೀಟರ್ ನೀರು'] },
+  { id: 'M1', name: 'Vanilla Shake', price: 139, image: 'M1.jpg' },
+  { id: 'M2', name: 'Strawberry Shake', price: 139, image: 'M2.jpg' },
+  { id: 'M3', name: 'Apple Shake', price: 139, image: 'M3.jpg' },
+  { id: 'M4', name: 'Chocolate Shake', price: 139, image: 'M4.jpg' },
+  { id: 'M5', name: 'Pineapple Shake', price: 139, image: 'M5.jpg' },
+  { id: 'M6', name: 'Orange Shake', price: 139, image: 'M6.jpg' },
+  { id: 'M7', name: 'Cold Coffee', price: 80, image: 'M7.jpg' },
+  { id: 'M8', name: 'Oreo Shake', price: 150, image: 'M8.jpg' },
 ];
 
 const categories = [
   { key: 'pizzas', name: 'Pizza', emoji: '🍕', items: pizzas },
   { key: 'burgers', name: 'Burgers', emoji: '🍔', items: burgers },
-  { key: 'sandwiches', name: 'Sandwiches', emoji: '🥪', items: sandwiches },
-  { key: 'sides', name: 'Sides', emoji: '🍟', items: sides },
+  { key: 'sandwichesAndSides', name: 'Sandwiches & Sides', emoji: '🥪', items: sandwichesAndSides },
   { key: 'milkshakes', name: 'Shakes', emoji: '🥤', items: milkshakes },
-  { key: 'drinks', name: 'Cold Drinks & Water', emoji: '🥤', items: drinks },
 ];
 
-const allItems = {};
-for (const cat of categories) {
-  for (const item of cat.items) {
-    allItems[item.id] = { ...item, category: cat.key };
-  }
-}
-for (const item of pizzaAddons) {
-  allItems[item.id] = { ...item, category: 'pizzaAddons' };
-}
+// Exact bestsellers requested by the restaurant.
+const bestsellers = ['P4', 'P5', 'P7', 'B2'];
 
-function normalize(value) {
-  return String(value || '')
-    .toLowerCase()
-    .normalize('NFKC')
-    .replace(/[’']/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+const allItems = {};
+for (const category of categories) {
+  for (const item of category.items) allItems[item.id] = { ...item, category: category.key };
 }
 
 function findItemById(id) {
-  return allItems[String(id || '').toUpperCase()] || null;
+  const key = String(id || '').trim().toUpperCase();
+  return allItems[key] || null;
 }
 
-function findItemsByText(query) {
-  const text = normalize(query);
-  if (!text) return [];
-  const candidates = Object.values(allItems).filter(item => {
-    const names = [item.name, ...(item.aliases || [])].map(normalize);
-    return names.some(n => n && (text === n || text.includes(n)));
-  });
-  // Prefer longer matches to avoid "chicken" matching generic things.
-  return candidates.sort((a, b) => b.name.length - a.name.length);
+function hasSizeVariants(item) {
+  return Boolean(item && item.prices && typeof item.prices === 'object');
 }
 
-function getCategory(key) {
-  return categories.find(c => c.key === key) || null;
+function getFinalPrice(item) {
+  if (!item) return NaN;
+  if (hasSizeVariants(item)) {
+    const values = Object.values(item.prices).map(Number).filter(Number.isFinite);
+    return values.length ? Math.max(...values) : NaN;
+  }
+  return Number(item.price);
+}
+
+// Kept for compatibility with existing project code.
+function getItemPrice(item, size = null) {
+  if (!item) return NaN;
+  if (hasSizeVariants(item)) {
+    if (size && Number.isFinite(Number(item.prices[size]))) return Number(item.prices[size]);
+    return getFinalPrice(item);
+  }
+  return Number(item.price);
 }
 
 module.exports = {
-  EXTRA_CHEESE_PRICE,
   pizzas,
-  pizzaAddons,
   burgers,
-  sandwiches,
-  sides,
+  sandwichesAndSides,
   milkshakes,
-  drinks,
   categories,
   allItems,
+  bestsellers,
   findItemById,
-  findItemsByText,
-  getCategory,
+  hasSizeVariants,
+  getItemPrice,
+  getFinalPrice,
+  EXTRA_CHEESE_PRICE,
 };

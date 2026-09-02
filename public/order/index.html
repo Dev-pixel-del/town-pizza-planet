@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#120f0d" />
+  <title>Town Pizza Planet — Order Online</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/order/styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+  <header class="topbar">
+    <button class="brand" data-home aria-label="Home"><span class="brand-mark">🍕</span><span><strong>Town Pizza Planet</strong><small>Fresh • Hot • Delivered</small></span></button>
+    <button class="cart-pill" data-cart><span>🛒</span><b id="cartCount">0</b><span>Cart</span></button>
+  </header>
+
+  <main id="app" class="app-shell"></main>
+
+  <aside id="cartDrawer" class="cart-drawer" aria-hidden="true">
+    <div class="drawer-head"><div><p class="eyebrow">YOUR ORDER</p><h2>Your Cart</h2></div><button class="icon-btn" data-close-cart>✕</button></div>
+    <div id="cartItems" class="cart-items"></div>
+    <div class="drawer-footer">
+      <div class="total-row"><span>Total</span><strong id="cartTotal">₹0</strong></div>
+      <button class="primary-btn wide" data-checkout>Checkout <span>→</span></button>
+    </div>
+  </aside>
+  <div id="scrim" class="scrim"></div>
+
+  <script src="/order/app.js"></script>
+</body>
+</html>

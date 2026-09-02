@@ -1,3 +1,5 @@
+require('dns').setServers(['1.1.1.1']);
+
 require('dotenv').config();
 const { app, setWhatsAppClient } = require('./admin/server');
 const { initDatabase } = require('./db/database');

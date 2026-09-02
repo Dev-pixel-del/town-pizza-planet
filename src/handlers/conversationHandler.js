@@ -1,288 +1,685 @@
-const { parseMessage, INTENT, CATEGORY_MAP } = require('./messageParser');
-const { categories } = require('../data/menu');
+// ============================================================
+// Town Pizza Planet — Final Button/Catalogue Conversation Handler
+// ============================================================
+// Flow:
+// Hi -> Language -> Bestsellers -> Menu categories ->
+// item image/price -> extra cheese (pizza only) -> quantity ->
+// Add to Cart -> Cart -> typed delivery address -> COD -> Confirm.
+// ============================================================
+
+const path = require('path');
+
+const {
+  categories,
+  bestsellers,
+  findItemById,
+  getFinalPrice,
+  EXTRA_CHEESE_PRICE,
+} = require('../data/menu');
 const { combos, findComboById } = require('../data/combos');
-const { tr } = require('../data/locale');
+const { familyPacks, findFamilyPackById } = require('../data/familyPacks');
 const {
   getSession,
   updateSessionState,
   setPendingItem,
-  setPendingCombo,
-  setLanguage,
-  setLocation,
-  setLandmark,
   setAddress,
+  setLanguage,
   resetSession,
   createOrder,
   getTodayOrderCount,
 } = require('../db/database');
-const { addItem, addCombo, removeItem, clearCart, getCart, getTotal } = require('../utils/cartManager');
-const fmt = require('../utils/formatter');
+const {
+  addItem,
+  addCombo,
+  clearCart,
+  getCart,
+  getTotal,
+} = require('../utils/cartManager');
+const ui = require('../ui/whatsappUI');
 
-const LANG_MAP = { '1': 'kn', '2': 'en', '3': 'hi', '4': 'ur' };
+let parser = null;
+try {
+  parser = require('./messageParser');
+} catch {
+  parser = null;
+}
+
+const INTENT = parser?.INTENT || {};
+const parseMessage = typeof parser?.parseMessage === 'function'
+  ? parser.parseMessage
+  : () => ({ intent: null });
 
 const STATE = {
   IDLE: 'IDLE',
   LANG_SELECT: 'LANG_SELECT',
   MAIN_MENU: 'MAIN_MENU',
   CATEGORY_BROWSE: 'CATEGORY_BROWSE',
-  CHECKOUT_LOCATION: 'CHECKOUT_LOCATION',
-  CHECKOUT_LANDMARK: 'CHECKOUT_LANDMARK',
+  EXTRA_CHEESE_SELECT: 'EXTRA_CHEESE_SELECT',
+  QUANTITY_SELECT: 'QUANTITY_SELECT',
+  COMBO_QUANTITY: 'COMBO_QUANTITY',
+  CART: 'CART',
   CHECKOUT_ADDRESS: 'CHECKOUT_ADDRESS',
+  CHECKOUT_PAYMENT: 'CHECKOUT_PAYMENT',
   CHECKOUT_CONFIRM: 'CHECKOUT_CONFIRM',
 };
 
-function categoryByKey(key) { return categories.find(c => c.key === key) || null; }
+const LANG_ROWS = [
+  { id: 'lang:en', title: 'English', description: 'Continue in English' },
+  { id: 'lang:kn', title: 'ಕನ್ನಡ (Kannada)', description: 'ಮುಂದುವರಿಸಿ ಕನ್ನಡದಲ್ಲಿ' },
+  { id: 'lang:hi', title: 'हिंदी (Hindi)', description: 'हिंदी में जारी रखें' },
+  { id: 'lang:ur', title: 'اردو (Urdu)', description: 'اردو میں جاری رکھیں' },
+];
 
-function distanceKm(lat1, lon1, lat2, lon2) {
-  const toRad = d => d * Math.PI / 180;
-  const R = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
+function finalPrice(item) {
+  const price = Number(getFinalPrice(item));
+  return Number.isFinite(price) ? price : NaN;
 }
 
-function validateDeliveryLocation(location) {
-  const rLat = Number(process.env.RESTAURANT_LATITUDE);
-  const rLon = Number(process.env.RESTAURANT_LONGITUDE);
-  const radius = Number(process.env.DELIVERY_RADIUS_KM || 5);
-  if (![rLat, rLon, location?.latitude, location?.longitude].every(Number.isFinite)) {
-    return { deliverable: true, distanceKm: null };
-  }
-  const d = distanceKm(rLat, rLon, Number(location.latitude), Number(location.longitude));
-  return { deliverable: d <= radius, distanceKm: d, radiusKm: radius };
+function categoryRows() {
+  return [
+    { id: 'cat:pizzas', title: '🍕 Pizza', description: 'Tap to browse pizzas' },
+    { id: 'cat:burgers', title: '🍔 Burgers', description: 'Tap to browse burgers' },
+    { id: 'cat:sandwichesAndSides', title: '🥪 Sandwiches & Sides', description: 'Sandwiches, fries & sides' },
+    { id: 'cat:milkshakes', title: '🥤 Shakes', description: 'Milkshakes & cold coffee' },
+    { id: 'cat:combos', title: '🎁 Combo Deals', description: 'Regular combo offers' },
+    { id: 'cat:familyPacks', title: '👨‍👩‍👧‍👦 Family Packs', description: 'Family-size offers' },
+  ];
 }
 
+function menuReply() {
+  return ui.list(
+    '🍕 *Town Pizza Planet*\n\nWhat would you like to order?',
+    'Open Menu',
+    categoryRows(),
+    'Town Pizza Planet',
+    'Tap a category to continue'
+  );
+}
 
-async function handleMessage(userId, messageText, contactName, location = null) {
-  const session = getSession(userId);
-  const parsed = parseMessage(messageText || '');
-  const lang = session.lang || 'en';
-  let notifyOwner = null;
-  const text = String(messageText || '').trim();
-
-  // First priority: location message when location is expected.
-  if (location && session.state === STATE.CHECKOUT_LOCATION) {
-    const receivedLocation = {
-      latitude: Number(location.latitude),
-      longitude: Number(location.longitude),
-      name: location.name || null,
-      address: location.address || null,
-      url: location.url || null,
+function bestsellerRows() {
+  return bestsellers.map(id => {
+    const item = findItemById(id);
+    if (!item) return null;
+    const price = finalPrice(item);
+    return {
+      id: `item:${item.id}`,
+      title: `${item.name} — ₹${price}`,
+      description: '⭐ Bestseller • Tap to view',
     };
-    const validation = validateDeliveryLocation(receivedLocation);
-    if (!validation.deliverable) {
-      const radius = validation.radiusKm || Number(process.env.DELIVERY_RADIUS_KM || 5);
-      const msg = lang === 'kn'
-        ? `ಕ್ಷಮಿಸಿ 🙏 ನಮ್ಮ ಡೆಲಿವರಿ ಪ್ರದೇಶವು ಸುಮಾರು ${radius} km ಒಳಗೆ ಮಾತ್ರ ಇದೆ. ದಯವಿಟ್ಟು ಇನ್ನೊಂದು ಸ್ಥಳ ನೀಡಿ.`
-        : lang === 'hi'
-          ? `माफ़ करें 🙏 हमारी डिलीवरी लगभग ${radius} km के अंदर है. कृपया दूसरा स्थान दें.`
-          : lang === 'ur'
-            ? `معذرت 🙏 ہماری ڈیلیوری تقریباً ${radius} کلومیٹر تک ہے۔ براہ کرم دوسرا مقام شیئر کریں۔`
-            : `Sorry 🙏 We currently deliver within about ${radius} km. Please share another location.`;
-      return { replies: [msg, fmt.locationPromptMessage(lang)], notifyOwner };
-    }
-    setLocation(userId, receivedLocation);
-    updateSessionState(userId, STATE.CHECKOUT_LANDMARK);
-    return { replies: [fmt.locationReceivedMessage(lang)], notifyOwner };
-  }
-
-  if (parsed.intent === INTENT.CHANGE_LANG) {
-    updateSessionState(userId, STATE.LANG_SELECT);
-    return { replies: [fmt.languageSelectionMessage()], notifyOwner };
-  }
-  if (parsed.intent === INTENT.HELP) return { replies: [fmt.helpMessage(lang)], notifyOwner };
-  if (parsed.intent === INTENT.RESET) {
-    resetSession(userId);
-    const s = getSession(userId);
-    updateSessionState(userId, STATE.MAIN_MENU);
-    return { replies: [fmt.welcomeMessage(contactName, s.lang || lang), fmt.mainMenuMessage(s.lang || lang)], notifyOwner };
-  }
-  if (parsed.intent === INTENT.CLEAR) {
-    clearCart(userId);
-    return { replies: [tr('cartEmpty', lang)], notifyOwner };
-  }
-  if (parsed.intent === INTENT.CART) return { replies: [fmt.cartMessage(getCart(userId), lang)], notifyOwner };
-
-  // State machine.
-  switch (session.state) {
-    case STATE.IDLE: {
-      if (!session.lang) {
-        updateSessionState(userId, STATE.LANG_SELECT);
-        return { replies: [fmt.languageSelectionMessage()], notifyOwner };
-      }
-      updateSessionState(userId, STATE.MAIN_MENU);
-      return { replies: [fmt.welcomeMessage(contactName, lang), fmt.mainMenuMessage(lang)], notifyOwner };
-    }
-
-    case STATE.LANG_SELECT: {
-      const selected = LANG_MAP[text] || parsed.data;
-      if (selected && ['en', 'kn', 'hi', 'ur'].includes(selected)) {
-        setLanguage(userId, selected);
-        updateSessionState(userId, STATE.MAIN_MENU);
-        return { replies: [fmt.welcomeMessage(contactName, selected), fmt.mainMenuMessage(selected)], notifyOwner };
-      }
-      return { replies: [fmt.languageSelectionMessage()], notifyOwner };
-    }
-
-    case STATE.CHECKOUT_LOCATION: {
-      if (['cancel', 'back', 'no'].includes(text.toLowerCase())) {
-        updateSessionState(userId, STATE.MAIN_MENU);
-        return { replies: [tr('generic').cancelled[lang] || 'Cancelled.'], notifyOwner };
-      }
-      if (/^(cant|cannot|can't|no location|manual|address|पता|ವಿಳಾಸ|پتہ)/i.test(text)) {
-        updateSessionState(userId, STATE.CHECKOUT_ADDRESS);
-        return { replies: [
-          lang === 'kn' ? '🏠 ದಯವಿಟ್ಟು ಸಂಪೂರ್ಣ ಡೆಲಿವರಿ ವಿಳಾಸ ಮತ್ತು ಹತ್ತಿರದ ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್ ಕಳುಹಿಸಿ.' :
-          lang === 'hi' ? '🏠 कृपया पूरा डिलीवरी पता और पास का लैंडमार्क भेजें.' :
-          lang === 'ur' ? '🏠 براہ کرم مکمل ڈیلیوری پتہ اور قریب کا لینڈ مارک بھیجیں۔' :
-          '🏠 Please send the complete delivery address and a nearby landmark.'
-        ], notifyOwner };
-      }
-      return { replies: [fmt.locationPromptMessage(lang)], notifyOwner };
-    }
-
-    case STATE.CHECKOUT_LANDMARK: {
-      if (!text || text.length < 2) return { replies: [fmt.locationReceivedMessage(lang)], notifyOwner };
-      setLandmark(userId, text);
-      updateSessionState(userId, STATE.CHECKOUT_CONFIRM);
-      const cart = getCart(userId);
-      return { replies: [fmt.orderConfirmMessage(cart, getSession(userId), lang)], notifyOwner };
-    }
-
-    case STATE.CHECKOUT_ADDRESS: {
-      if (parsed.intent === INTENT.CANCEL) {
-        updateSessionState(userId, STATE.MAIN_MENU);
-        return { replies: [tr('generic').cancelled[lang] || 'Cancelled.', fmt.cartMessage(getCart(userId), lang)], notifyOwner };
-      }
-      if (text.length >= 5) {
-        setAddress(userId, text);
-        updateSessionState(userId, STATE.CHECKOUT_CONFIRM);
-        return { replies: [fmt.orderConfirmMessage(getCart(userId), getSession(userId), lang)], notifyOwner };
-      }
-      return { replies: ['📍 Please send a complete address and nearby landmark.'], notifyOwner };
-    }
-
-    case STATE.CHECKOUT_CONFIRM: {
-      if (parsed.intent === INTENT.YES) {
-        const cart = getCart(userId);
-        const total = getTotal(cart);
-        if (total < 150) {
-          updateSessionState(userId, STATE.MAIN_MENU);
-          return { replies: [fmt.minOrderMessage(150 - total, lang), fmt.cartMessage(cart, lang)], notifyOwner };
-        }
-        const current = getSession(userId);
-        const orderId = await createOrder(userId, contactName || 'Customer', cart, total, total, {
-          language: lang,
-          location: current.location,
-          landmark: current.landmark,
-          address: current.address,
-        });
-        resetSession(userId);
-        setLanguage(userId, lang);
-        updateSessionState(userId, STATE.MAIN_MENU);
-        const order = require('../db/database').getOrderById(orderId);
-        notifyOwner = { orderId, message: fmt.ownerNotificationMessage(order, getTodayOrderCount()) };
-        return { replies: [fmt.orderPlacedMessage(orderId, total, lang)], notifyOwner };
-      }
-      if (parsed.intent === INTENT.NO || parsed.intent === INTENT.CANCEL) {
-        updateSessionState(userId, STATE.MAIN_MENU);
-        return { replies: [tr('generic').cancelled[lang] || 'Cancelled.', fmt.mainMenuMessage(lang)], notifyOwner };
-      }
-      return { replies: [tr('confirm', lang)], notifyOwner };
-    }
-
-    case STATE.MAIN_MENU:
-    case STATE.CATEGORY_BROWSE: {
-      if (parsed.intent === INTENT.GREETING) return { replies: [fmt.welcomeMessage(contactName, lang), fmt.mainMenuMessage(lang)], notifyOwner };
-      if (parsed.intent === INTENT.MENU) { updateSessionState(userId, STATE.MAIN_MENU); return { replies: [fmt.mainMenuMessage(lang)], notifyOwner }; }
-      if (parsed.intent === INTENT.COMBOS) return { replies: [fmt.combosMessage(lang)], notifyOwner };
-      if (parsed.intent === INTENT.CANCEL) { updateSessionState(userId, STATE.MAIN_MENU); return { replies: [fmt.mainMenuMessage(lang)], notifyOwner }; }
-
-      if (parsed.intent === INTENT.SELECT_CATEGORY) {
-        if (parsed.data === 'combos') return { replies: [fmt.combosMessage(lang)], notifyOwner };
-        const cat = categoryByKey(parsed.data);
-        if (cat) {
-          updateSessionState(userId, STATE.CATEGORY_BROWSE);
-          return { replies: [fmt.categoryItemsMessage(cat, lang)], notifyOwner };
-        }
-      }
-
-      if (parsed.intent === INTENT.ADD_COMBO) {
-        addCombo(userId, parsed.data);
-        return postAddResponse(userId, lang, `🎁 Added *${parsed.data.name}* — ₹${parsed.data.price}`);
-      }
-
-      if (parsed.intent === INTENT.ADD_ITEM) {
-        const items = Array.isArray(parsed.data) ? parsed.data : [parsed.data];
-        const byName = new Map();
-        for (const entry of items) {
-          const item = entry.item || entry;
-          if (!item || !item.price) continue;
-          const key = item.name.toLowerCase();
-          if (!byName.has(key)) byName.set(key, []);
-          byName.get(key).push({ item, qty: Math.max(1, Number(entry.qty || 1)) });
-        }
-        for (const [name, choices] of byName.entries()) {
-          if (choices.length > 1) {
-            const lines = choices.map(c => `• ${c.item.name} — ₹${c.item.price}`).join('\n');
-            return { replies: [`Which *${name}* would you like?\n${lines}`], notifyOwner };
-          }
-        }
-        const added = [];
-        for (const entry of items) {
-          const item = entry.item || entry;
-          if (!item || !item.price) continue;
-          const qty = Math.max(1, Number(entry.qty || 1));
-          addItem(userId, item, qty, false);
-          added.push(`${item.name} × ${qty} — ₹${item.price * qty}`);
-        }
-        if (added.length) return postAddResponse(userId, lang, `✅ Added:\n${added.join('\n')}`);
-      }
-
-      if (parsed.intent === INTENT.REMOVE_ITEM) {
-        const result = removeItem(userId, parsed.data);
-        if (!result.removed) return { replies: ['❌ Invalid item number. Type *cart*.'], notifyOwner };
-        return { replies: [`✅ Removed *${result.removed.name}*.`, fmt.cartMessage(result.cart, lang)], notifyOwner };
-      }
-
-      if (parsed.intent === INTENT.CHECKOUT) return handleCheckout(userId, lang);
-
-      if (parsed.intent === INTENT.TEXT) {
-        const lowered = text.toLowerCase();
-        const cat = CATEGORY_MAP[lowered];
-        if (cat) {
-          if (cat === 'combos') return { replies: [fmt.combosMessage(lang)], notifyOwner };
-          const category = categoryByKey(cat);
-          if (category) return { replies: [fmt.categoryItemsMessage(category, lang)], notifyOwner };
-        }
-      }
-
-      return { replies: [fmt.unknownMessage(lang), fmt.mainMenuMessage(lang)], notifyOwner };
-    }
-
-    default:
-      resetSession(userId);
-      updateSessionState(userId, STATE.LANG_SELECT);
-      return { replies: [fmt.languageSelectionMessage()], notifyOwner };
-  }
+  }).filter(Boolean);
 }
 
-function handleCheckout(userId, lang) {
+function bestsellerReply() {
+  return ui.list(
+    '⭐ *Bestsellers*\n\nOur customer favourites: Sweet Corn Pizza, Baby Corn Pizza, Paneer Pizza & Cheez Burger.',
+    'View Bestsellers',
+    bestsellerRows(),
+    'Bestsellers',
+    'Tap an item to view'
+  );
+}
+
+function productRows(category) {
+  return (category?.items || []).map(item => {
+    const price = finalPrice(item);
+    return {
+      id: `item:${item.id}`,
+      title: `${item.name} — ₹${price}`,
+      description: 'Tap to see image & add',
+    };
+  }).slice(0, 10);
+}
+
+function comboRows() {
+  return combos.map(combo => ({
+    id: `combo:${combo.id}`,
+    title: `${combo.name} — ₹${combo.price}`,
+    description: combo.description,
+  }));
+}
+
+function familyRows() {
+  return familyPacks.map(pack => ({
+    id: `family:${pack.id}`,
+    title: `${pack.name} — ₹${pack.price}`,
+    description: pack.description,
+  }));
+}
+
+function comboListReplies() {
+  const rows = comboRows();
+  const chunks = [];
+  for (let i = 0; i < rows.length; i += 10) chunks.push(rows.slice(i, i + 10));
+
+  return chunks.map((chunk, index) => ui.list(
+    `🎁 *Combo Deals*${index ? ' — More' : ''}\n\nChoose a combo.`,
+    'View Combos',
+    chunk,
+    index ? 'More Combo Deals' : 'Combo Deals',
+    'Tap a combo to view image & price'
+  ));
+}
+
+function familyPackReply() {
+  return ui.list(
+    '👨‍👩‍👧‍👦 *Family Packs*\n\nChoose a family pack.',
+    'View Family Packs',
+    familyRows(),
+    'Family Packs',
+    'Separate from regular Combo Deals'
+  );
+}
+
+function quantityButtons() {
+  return ui.buttons('Use the buttons below.', [
+    { id: 'qty:minus', body: '➖' },
+    { id: 'qty:add', body: '🛒 Add to Cart' },
+    { id: 'qty:plus', body: '➕' },
+  ]);
+}
+
+function quickActions() {
+  return ui.buttons('What would you like to do next?', [
+    { id: 'action:menu', body: '📋 Menu' },
+    { id: 'action:cart', body: '🛒 Cart' },
+    { id: 'action:checkout', body: '💳 Checkout' },
+  ]);
+}
+
+function productDetailReplies(item) {
+  const price = finalPrice(item);
+  const replies = [];
+  const media = ui.productImage(item);
+  if (media) replies.push(media);
+
+  replies.push(ui.text(
+    `🍽️ *${item.name}*\n\n💰 *Price: ₹${price}*\n\nChoose an option below.`
+  ));
+
+  if (item.id.startsWith('P')) {
+    replies.push(ui.buttons(
+      `🧀 *Extra Cheese +₹${EXTRA_CHEESE_PRICE}*\n\nWould you like extra cheese?`,
+      [
+        { id: 'cheese:yes', body: `🧀 Yes +₹${EXTRA_CHEESE_PRICE}` },
+        { id: 'cheese:no', body: '❌ No' },
+        { id: 'action:cancel', body: '↩️ Cancel' },
+      ],
+      item.name,
+      `Final pizza price: ₹${price}`
+    ));
+  } else {
+    replies.push(quantityButtons());
+  }
+
+  return replies;
+}
+
+function pendingQuantityReply(pending) {
+  const unit = Number(pending.unitPrice);
+  const qty = Math.max(1, Number(pending.qty || 1));
+  const cheese = pending.extraCheese ? EXTRA_CHEESE_PRICE : 0;
+  const effectiveUnit = unit + cheese;
+  const total = effectiveUnit * qty;
+
+  return [
+    ui.text(
+      `🔢 *${pending.name}*\n\nQuantity: *${qty}*\nUnit price: ₹${effectiveUnit}\nTotal: *₹${total}*`
+    ),
+    quantityButtons(),
+  ];
+}
+
+function cartReply(userId) {
   const cart = getCart(userId);
-  if (!cart.length) return { replies: [fmt.cartMessage(cart, lang)], notifyOwner: null };
-  const total = getTotal(cart);
-  if (total < 150) return { replies: [fmt.minOrderMessage(150 - total, lang), fmt.cartMessage(cart, lang)], notifyOwner: null };
-  updateSessionState(userId, STATE.CHECKOUT_LOCATION);
-  return { replies: [fmt.locationPromptMessage(lang)], notifyOwner: null };
+  if (!cart.length) {
+    return [ui.text('🛒 *Your cart is empty.*'), menuReply()];
+  }
+
+  let total = 0;
+  const lines = cart.map((item, index) => {
+    const price = Number(item?.price);
+    const qty = Number(item?.qty);
+    const line = (Number.isFinite(price) ? price : 0) * (Number.isFinite(qty) ? qty : 0);
+    total += line;
+    return `${index + 1}. ${item.name}${item.extraCheese ? ' +🧀 Extra Cheese' : ''} × ${qty} — ₹${line}`;
+  });
+
+  return [
+    ui.text(`🛒 *Your Cart*\n\n${lines.join('\n')}\n\n━━━━━━━━━━━━\n*Total: ₹${total}*`),
+    ui.buttons('Choose an action', [
+      { id: 'action:menu', body: '➕ Add More' },
+      { id: 'action:checkout', body: '💳 Checkout' },
+      { id: 'cart:clear', body: '🗑️ Clear' },
+    ]),
+  ];
 }
 
-function postAddResponse(userId, lang, addedMessage) {
-  const total = getTotal(getCart(userId));
-  const replies = [addedMessage];
-  if (total >= 150) replies.push(fmt.freeDeliveryMessage(lang));
-  else replies.push(fmt.freeDeliveryMessage(lang).replace(/UNLOCKED|लाभ|लഭ्य|ان لاک ہوگئی/gi, '') + '\n' + fmt.cartMessage(getCart(userId), lang));
-  return { replies, notifyOwner: null };
+function normalizeDirectId(raw) {
+  return String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
 }
 
-module.exports = { handleMessage, handleCheckout, STATE };
+function restartWithLanguage(userId) {
+  updateSessionState(userId, STATE.LANG_SELECT);
+  return [ui.list(
+    '👋 *Welcome to Town Pizza Planet!*\n\nPlease choose your language.',
+    'Choose Language',
+    LANG_ROWS,
+    'Language',
+    'English • Kannada • Hindi • Urdu'
+  )];
+}
+
+async function handleMessage(userId, messageText, contactName) {
+  const session = getSession(userId);
+  const raw = String(messageText || '').trim();
+  const lower = raw.toLowerCase();
+  const parsed = parseMessage(raw) || {};
+  const intent = parsed.intent;
+  const lang = session.lang || 'en';
+
+  // ------------------------------------------------------------
+  // GLOBAL / BUTTON ACTIONS
+  // ------------------------------------------------------------
+  if (lower.startsWith('lang:')) {
+    const selected = lower.split(':')[1];
+    if (['en', 'kn', 'hi', 'ur'].includes(selected)) {
+      setLanguage(userId, selected);
+      updateSessionState(userId, STATE.MAIN_MENU);
+      return {
+        replies: [
+          ui.text(`✅ ${selected === 'en' ? 'English' : selected === 'kn' ? 'ಕನ್ನಡ' : selected === 'hi' ? 'हिंदी' : 'اردو'} selected.`),
+          bestsellerReply(),
+          menuReply(),
+        ],
+        notifyOwner: null,
+      };
+    }
+  }
+
+  if (lower === 'action:cancel' || lower === 'cancel') {
+    setPendingItem(userId, null);
+    updateSessionState(userId, STATE.MAIN_MENU);
+    return { replies: [ui.text('↩️ Cancelled.'), menuReply()], notifyOwner: null };
+  }
+
+  if (lower === 'action:start' || lower === 'start' || lower === 'restart') {
+    if (!session.lang) return { replies: restartWithLanguage(userId), notifyOwner: null };
+    updateSessionState(userId, STATE.MAIN_MENU);
+    return { replies: [bestsellerReply(), menuReply()], notifyOwner: null };
+  }
+
+  if (lower === 'action:menu' || lower === 'menu' || intent === INTENT.MENU) {
+    updateSessionState(userId, STATE.MAIN_MENU);
+    return { replies: [bestsellerReply(), menuReply()], notifyOwner: null };
+  }
+
+  if (lower === 'action:cart' || lower === 'cart' || intent === INTENT.CART) {
+    updateSessionState(userId, STATE.CART);
+    return { replies: cartReply(userId), notifyOwner: null };
+  }
+
+  if (lower === 'cart:clear' || lower === 'clear cart' || intent === INTENT.CLEAR) {
+    clearCart(userId);
+    updateSessionState(userId, STATE.MAIN_MENU);
+    return { replies: [ui.text('🗑️ *Cart cleared.*'), menuReply()], notifyOwner: null };
+  }
+
+  // ------------------------------------------------------------
+  // LANGUAGE SELECTION FALLBACK
+  // ------------------------------------------------------------
+  if (!session.lang && (intent === INTENT.GREETING || ['hi', 'hello', 'hey', 'namaste', 'menu', 'start'].includes(lower))) {
+    return { replies: restartWithLanguage(userId), notifyOwner: null };
+  }
+
+  // ------------------------------------------------------------
+  // DELIVERY ADDRESS: ONLY TYPED TEXT
+  // ------------------------------------------------------------
+  if (session.state === STATE.CHECKOUT_ADDRESS && raw.length >= 5) {
+    setAddress(userId, raw);
+    updateSessionState(userId, STATE.CHECKOUT_PAYMENT);
+    return {
+      replies: [
+        ui.text(`📍 *Address saved.*\n\n${raw}`),
+        ui.buttons('Choose payment method', [
+          { id: 'payment:cod', body: '💵 Cash on Delivery' },
+          { id: 'action:cart', body: '🛒 Back to Cart' },
+          { id: 'order:cancel', body: '❌ Cancel' },
+        ]),
+      ],
+      notifyOwner: null,
+    };
+  }
+
+  // ------------------------------------------------------------
+  // CATEGORY BUTTONS
+  // ------------------------------------------------------------
+  if (lower.startsWith('cat:')) {
+    const key = raw.slice(4);
+
+    if (key === 'combos') {
+      updateSessionState(userId, STATE.CATEGORY_BROWSE);
+      return { replies: comboListReplies(), notifyOwner: null };
+    }
+
+    if (key === 'familyPacks') {
+      updateSessionState(userId, STATE.CATEGORY_BROWSE);
+      return { replies: [familyPackReply()], notifyOwner: null };
+    }
+
+    const category = categories.find(c => c.key === key);
+    if (!category) return { replies: [ui.text('That category is unavailable right now. Please choose another category.')], notifyOwner: null };
+
+    updateSessionState(userId, STATE.CATEGORY_BROWSE);
+    return {
+      replies: [ui.list(
+        `${category.emoji} *${category.name}*\n\nChoose a dish.`,
+        'View Items',
+        productRows(category),
+        category.name,
+        'Tap an item to see image, price & add option'
+      )],
+      notifyOwner: null,
+    };
+  }
+
+  // ------------------------------------------------------------
+  // PRODUCT BUTTON / LIST SELECTION
+  // ------------------------------------------------------------
+  if (lower.startsWith('item:')) {
+    const id = raw.slice(5);
+    const item = findItemById(id);
+    if (!item) return { replies: [ui.text('Sorry, that dish is unavailable right now.')], notifyOwner: null };
+
+    const price = finalPrice(item);
+    if (!Number.isFinite(price)) return { replies: [ui.text('Sorry, this dish has an invalid price and cannot be ordered right now.')], notifyOwner: null };
+
+    const pending = {
+      id: item.id,
+      name: item.name,
+      unitPrice: price,
+      qty: 1,
+      extraCheese: false,
+      isCombo: false,
+    };
+    setPendingItem(userId, pending);
+
+    if (item.id.startsWith('P')) updateSessionState(userId, STATE.EXTRA_CHEESE_SELECT);
+    else updateSessionState(userId, STATE.QUANTITY_SELECT);
+
+    return { replies: productDetailReplies(item), notifyOwner: null };
+  }
+
+  // ------------------------------------------------------------
+  // COMBO BUTTON / LIST SELECTION
+  // ------------------------------------------------------------
+  if (lower.startsWith('combo:')) {
+    const combo = findComboById(raw.slice(6));
+    if (!combo) return { replies: [ui.text('Sorry, that combo is unavailable right now.')], notifyOwner: null };
+
+    const pending = {
+      id: combo.id,
+      name: combo.name,
+      unitPrice: Number(combo.price),
+      qty: 1,
+      extraCheese: false,
+      isCombo: true,
+      packType: 'combo',
+    };
+    setPendingItem(userId, pending);
+    updateSessionState(userId, STATE.COMBO_QUANTITY);
+
+    const replies = [];
+    const media = ui.comboImage(combo);
+    if (media) replies.push(media);
+    replies.push(ui.text(`🎁 *${combo.name}*\n\n${combo.description}\n\n💰 *₹${combo.price}*`));
+    replies.push(...pendingQuantityReply(pending));
+    return { replies, notifyOwner: null };
+  }
+
+  // ------------------------------------------------------------
+  // FAMILY PACK BUTTON / LIST SELECTION
+  // ------------------------------------------------------------
+  if (lower.startsWith('family:')) {
+    const pack = findFamilyPackById(raw.slice(7));
+    if (!pack) return { replies: [ui.text('Sorry, that family pack is unavailable right now.')], notifyOwner: null };
+
+    const pending = {
+      id: pack.id,
+      name: pack.name,
+      unitPrice: Number(pack.price),
+      qty: 1,
+      extraCheese: false,
+      isCombo: true,
+      packType: 'family',
+    };
+    setPendingItem(userId, pending);
+    updateSessionState(userId, STATE.COMBO_QUANTITY);
+
+    const replies = [];
+    const media = ui.familyPackImage(pack);
+    if (media) replies.push(media);
+    replies.push(ui.text(`👨‍👩‍👧‍👦 *${pack.name}*\n\n${pack.description}\n\n💰 *₹${pack.price}*`));
+    replies.push(...pendingQuantityReply(pending));
+    return { replies, notifyOwner: null };
+  }
+
+  // ------------------------------------------------------------
+  // EXTRA CHEESE
+  // ------------------------------------------------------------
+  if (lower === 'cheese:yes' || lower === 'cheese:no') {
+    const pending = session.pending_item;
+    if (!pending || !pending.id) return { replies: [ui.text('Please choose a dish again.')], notifyOwner: null };
+
+    pending.extraCheese = lower === 'cheese:yes';
+    setPendingItem(userId, pending);
+    updateSessionState(userId, STATE.QUANTITY_SELECT);
+    return { replies: pendingQuantityReply(pending), notifyOwner: null };
+  }
+
+  // ------------------------------------------------------------
+  // QUANTITY CONTROLS
+  // ------------------------------------------------------------
+  if (lower === 'qty:minus' || lower === 'qty:plus') {
+    const pending = session.pending_item;
+    if (!pending) return { replies: [ui.text('Please choose a dish again.')], notifyOwner: null };
+
+    pending.qty = Math.max(
+      1,
+      Number(pending.qty || 1) + (lower === 'qty:plus' ? 1 : -1)
+    );
+    setPendingItem(userId, pending);
+    updateSessionState(userId, pending.isCombo ? STATE.COMBO_QUANTITY : STATE.QUANTITY_SELECT);
+    return { replies: pendingQuantityReply(pending), notifyOwner: null };
+  }
+
+  if (lower === 'qty:add') {
+    const pending = session.pending_item;
+    if (!pending?.id) return { replies: [ui.text('Please choose a dish again.')], notifyOwner: null };
+
+    try {
+      if (pending.isCombo) {
+        const combo = findComboById(pending.id);
+        const family = findFamilyPackById(pending.id);
+        const chosen = combo || family;
+        if (!chosen) throw new Error(`Unknown pack ${pending.id}`);
+        addCombo(userId, chosen, Number(pending.qty || 1));
+      } else {
+        const item = findItemById(pending.id);
+        if (!item) throw new Error(`Unknown item ${pending.id}`);
+        addItem(userId, item, Number(pending.qty || 1), null, Boolean(pending.extraCheese));
+      }
+    } catch (err) {
+      console.error('❌ Add-to-cart failed:', err);
+      return { replies: [ui.text('😥 I could not add that item. Please try again.')], notifyOwner: null };
+    }
+
+    const addedText = `${pending.name}${pending.extraCheese ? ' +🧀 Extra Cheese' : ''} × ${pending.qty}`;
+    setPendingItem(userId, null);
+    updateSessionState(userId, STATE.CATEGORY_BROWSE);
+
+    return {
+      replies: [ui.text(`✅ *Added to cart!*\n${addedText}`), quickActions()],
+      notifyOwner: null,
+    };
+  }
+
+  // ------------------------------------------------------------
+  // CHECKOUT
+  // ------------------------------------------------------------
+  if (lower === 'action:checkout' || lower === 'checkout' || intent === INTENT.CHECKOUT) {
+    const cart = getCart(userId);
+    if (!cart.length) return { replies: [ui.text('🛒 *Your cart is empty.*'), menuReply()], notifyOwner: null };
+
+    updateSessionState(userId, STATE.CHECKOUT_ADDRESS);
+    return {
+      replies: [ui.text(
+        '📍 *Delivery Address*\n\nPlease type your complete delivery address.\n\n🔒 Address is collected as typed text only. No GPS location or Google Maps link is required.'
+      )],
+      notifyOwner: null,
+    };
+  }
+
+  if (lower === 'payment:cod') {
+    const cart = getCart(userId);
+    const total = Number(getTotal(cart));
+    if (!cart.length || !Number.isFinite(total)) {
+      return { replies: [ui.text('😥 Your cart needs to be corrected before checkout.')], notifyOwner: null };
+    }
+
+    updateSessionState(userId, STATE.CHECKOUT_CONFIRM);
+    return {
+      replies: [
+        ui.text(`💵 *Cash on Delivery selected.*\n\nTotal: *₹${total}*`),
+        ui.buttons('Confirm your order?', [
+          { id: 'order:confirm', body: '✅ Confirm Order' },
+          { id: 'order:cancel', body: '❌ Cancel' },
+        ]),
+      ],
+      notifyOwner: null,
+    };
+  }
+
+  if (lower === 'order:cancel') {
+    updateSessionState(userId, STATE.CART);
+    return { replies: [ui.text('❌ Order cancelled.'), ...cartReply(userId)], notifyOwner: null };
+  }
+
+  if (lower === 'order:confirm') {
+    const cart = getCart(userId);
+    const total = Number(getTotal(cart));
+    const address = String(session.address || '').trim();
+
+    if (!cart.length || !Number.isFinite(total)) {
+      return { replies: [ui.text('😥 Your cart needs to be corrected before placing the order.')], notifyOwner: null };
+    }
+    if (address.length < 5) {
+      updateSessionState(userId, STATE.CHECKOUT_ADDRESS);
+      return { replies: [ui.text('📍 Please enter a valid delivery address first.')], notifyOwner: null };
+    }
+
+    let orderId;
+    try {
+      orderId = await Promise.resolve(
+        createOrder(userId, contactName || 'Customer', cart, total, address)
+      );
+    } catch (err) {
+      console.error('❌ createOrder failed:', err);
+      return { replies: [ui.text('😥 I could not place the order. Please try again.')], notifyOwner: null };
+    }
+
+    const id = String(orderId);
+    let daily = 1;
+    try {
+      daily = Number(await Promise.resolve(getTodayOrderCount())) || 1;
+    } catch {}
+
+    const ownerLines = cart.map((item, index) => {
+      const qty = Number(item?.qty || 0);
+      const price = Number(item?.price || 0);
+      return `${index + 1}. ${item.name}${item.extraCheese ? ' +🧀 Extra Cheese' : ''} × ${qty} — ₹${price * qty}`;
+    });
+
+    const ownerMessage = [
+      '🔔 *NEW ORDER — TOWN PIZZA PLANET*',
+      `📦 Order #${daily}`,
+      `🆔 ID: ${id}`,
+      `👤 Customer: ${contactName || 'Customer'}`,
+      `📱 Phone: ${String(userId).replace('@c.us', '')}`,
+      '',
+      ...ownerLines,
+      '',
+      `💰 *TOTAL: ₹${total}*`,
+      '💵 Payment: Cash on Delivery',
+      `📍 Address: ${address}`,
+      '',
+      '📞 Call for more details: 9448769098 / 6362648283',
+    ].join('\n');
+
+    const reply = ui.text(
+      `🎉 *Order Placed Successfully!* 🎉\n\n📦 *Order ID:* ${id}\n💰 *Total:* ₹${total}\n💵 *Payment:* Cash on Delivery\n\nThank you for ordering from *Town Pizza Planet*! ❤️`
+    );
+
+    // Preserve selected language for the next order while clearing the cart.
+    resetSession(userId);
+    try { setLanguage(userId, lang); } catch {}
+
+    return {
+      replies: [reply],
+      notifyOwner: { message: ownerMessage, orderId: id },
+    };
+  }
+
+  // ------------------------------------------------------------
+  // TEXT FALLBACKS / FIRST CONTACT
+  // ------------------------------------------------------------
+  if (intent === INTENT.GREETING || ['hi', 'hello', 'hey', 'namaste', 'salaam'].includes(lower)) {
+    if (!session.lang) return { replies: restartWithLanguage(userId), notifyOwner: null };
+    updateSessionState(userId, STATE.MAIN_MENU);
+    return { replies: [bestsellerReply(), menuReply()], notifyOwner: null };
+  }
+
+  if (intent === INTENT.CHANGE_LANG || lower === 'language') {
+    return { replies: restartWithLanguage(userId), notifyOwner: null };
+  }
+
+  if (intent === INTENT.HELP || lower === 'help') {
+    return {
+      replies: [ui.text('Use the buttons to browse the menu, view your cart, and checkout. You can also type *menu*, *cart*, or *checkout*.')],
+      notifyOwner: null,
+    };
+  }
+
+  // Direct code fallback, useful for owner testing even though the customer UI is button-first.
+  const directId = normalizeDirectId(raw);
+  if (directId) {
+    const item = findItemById(directId);
+    const combo = findComboById(directId);
+    const family = findFamilyPackById(directId);
+    if (item) {
+      const price = finalPrice(item);
+      const pending = { id: item.id, name: item.name, unitPrice: price, qty: 1, extraCheese: false, isCombo: false };
+      setPendingItem(userId, pending);
+      updateSessionState(userId, item.id.startsWith('P') ? STATE.EXTRA_CHEESE_SELECT : STATE.QUANTITY_SELECT);
+      return { replies: productDetailReplies(item), notifyOwner: null };
+    }
+    if (combo || family) {
+      const pack = combo || family;
+      const pending = { id: pack.id, name: pack.name, unitPrice: Number(pack.price), qty: 1, extraCheese: false, isCombo: true };
+      setPendingItem(userId, pending);
+      updateSessionState(userId, STATE.COMBO_QUANTITY);
+      const replies = [];
+      const media = combo ? ui.comboImage(pack) : ui.familyPackImage(pack);
+      if (media) replies.push(media);
+      replies.push(ui.text(`🎁 *${pack.name}*\n\n${pack.description}\n\n💰 *₹${pack.price}*`));
+      replies.push(...pendingQuantityReply(pending));
+      return { replies, notifyOwner: null };
+    }
+  }
+
+  return {
+    replies: [ui.text('🤔 Please use the buttons above to continue, or type *menu* to open the menu.')],
+    notifyOwner: null,
+  };
+}
+
+module.exports = { handleMessage, STATE };

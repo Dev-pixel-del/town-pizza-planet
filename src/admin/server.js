@@ -2,6 +2,7 @@ require('dotenv').config();
 const crypto = require('crypto');
 const path = require('path');
 const express = require('express');
+const { createOrderRouter } = require('../web/orderApi');
 const {
   getOrders,
   getTodayOrders,
@@ -19,6 +20,8 @@ const COOKIE_NAME = 'tpp_admin_session';
 app.disable('x-powered-by');
 app.use(express.json({ limit: '100kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use('/order', createOrderRouter(() => whatsappClient));
+app.use('/api/order', createOrderRouter(() => whatsappClient));
 
 function createToken() { return crypto.randomBytes(32).toString('hex'); }
 function parseCookies(req) {

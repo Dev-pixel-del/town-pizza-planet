@@ -1,138 +1,292 @@
-const { categories, pizzas, pizzaAddons, burgers, sandwiches, sides, milkshakes, drinks } = require('../data/menu');
+// ============================================================
+// Town Pizza Planet — Message Formatter (Multilingual)
+// ============================================================
+// Formats all WhatsApp messages using the localization system.
+// All user-facing messages support: English, Kannada, Hindi, Urdu.
+// ============================================================
+
+const { categories } = require('../data/menu');
 const { combos } = require('../data/combos');
 const { tr, languagePrompt } = require('../data/locale');
 
 const STORE_NAME = process.env.STORE_NAME || 'Town Pizza Planet';
-const STORE_PHONE = process.env.STORE_PHONE || '';
+const STORE_PHONE = process.env.STORE_PHONE || '8310941187';
 
-function languageSelectionMessage() { return languagePrompt; }
-function welcomeMessage(name, lang) { return tr('welcome', lang)(name || 'there'); }
-function mainMenuMessage(lang) { return tr('mainMenu', lang); }
+// ─── Language Selection ────────────────────────────────
 
-function formatItemLine(item) {
-  return `*${item.id}.* ${item.name} — ₹${item.price}`;
+function languageSelectionMessage() {
+  return languagePrompt;
 }
 
-function categoryItemsMessage(category, lang) {
-  let msg = `${category.emoji} *${category.name.toUpperCase()}*\n━━━━━━━━━━━━━━━━━━━━\n\n`;
-  category.items.forEach(item => { msg += `${formatItemLine(item)}\n`; });
-  if (category.key === 'pizzas') msg += `\n🧀 Extra Cheese — ₹30\n`;
-  msg += `\n━━━━━━━━━━━━━━━━━━━━\nReply with the item code or item name.\n🛒 Type *cart* to review.`;
+// ─── Start Ordering ───────────────────────────────────
+
+function startOrderingMessage() {
+  return tr('startOrdering', 'en');
+}
+
+// ─── Welcome ───────────────────────────────────────────
+
+function welcomeMessage(contactName, lang = 'en') {
+  const fn = tr('welcome', lang);
+  return typeof fn === 'function' ? fn(contactName) : fn;
+}
+
+// ─── Main Menu ─────────────────────────────────────────
+
+function mainMenuMessage(lang = 'en') {
+  return tr('mainMenu', lang);
+}
+
+// ─── Category Items ────────────────────────────────────
+
+function categoryItemsMessage(category, lang = 'en') {
+  let msg = `${category.emoji} *${category.emoji} ${category.name}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  category.items.forEach(item => {
+    msg += `*${item.id}.* ${item.name}\n`;
+    if (item.prices) {
+      const sizes = Object.entries(item.prices);
+      msg += `     ${sizes.map(([s, p]) => `${s.charAt(0).toUpperCase() + s.slice(1)}: ₹${p}`).join(' / ')}\n`;
+    } else {
+      msg += `     ₹${item.price}\n`;
+    }
+  });
+
+  // Add extra cheese note for pizzas
+  if (category.key === 'pizzas') {
+    msg += `\n${tr('extraCheese', lang)}\n`;
+  }
+
+  msg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+  const sampleCode = category.items[0]?.id || 'P1';
+  const footerFn = tr('categoryFooter', lang);
+  msg += typeof footerFn === 'function' ? footerFn(sampleCode) : footerFn;
+
   return msg;
 }
 
-function combosMessage(lang) {
-  let msg = `${tr('combosHeader', lang)}\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+// ─── Combos ────────────────────────────────────────────
+
+function combosMessage(lang = 'en') {
+  let msg = `${tr('combosHeader', lang)}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
   combos.forEach(combo => {
-    msg += `*${combo.id}. ${combo.name}* — ₹${combo.price}\n${combo.description}\n`;
-    if (combo.serves) msg += `👨‍👩‍👧‍👦 Serves ${combo.serves}\n`;
-    if (combo.notes) msg += `ℹ️ ${combo.notes}\n`;
-    msg += '\n';
+    msg += `*${combo.id}. ${combo.name}* — ₹${combo.price}\n`;
+    msg += `   ${combo.description}\n\n`;
   });
-  msg += '━━━━━━━━━━━━━━━━━━━━\nReply with the combo code or name.';
+
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  const footerFn = tr('combosFooter', lang);
+  msg += typeof footerFn === 'function' ? footerFn : footerFn;
+
   return msg;
 }
 
-function itemAddedMessage(name, qty, price, lang) {
-  const extra = qty > 1 ? ` × ${qty}` : '';
-  return `✅ Added *${name}*${extra} — ₹${price * qty}`;
+// ─── Size Selection ────────────────────────────────────
+
+function sizeSelectionMessage(item, lang = 'en') {
+  const promptFn = tr('sizePrompt', lang);
+  let msg = (typeof promptFn === 'function' ? promptFn(item.name) : promptFn) + '\n\n';
+
+  const sizes = Object.entries(item.prices);
+  sizes.forEach(([size, price], i) => {
+    const label = size.charAt(0).toUpperCase() + size.slice(1);
+    msg += `*${i + 1}.* ${label} — ₹${price}\n`;
+  });
+
+  msg += `\n${tr('sizeCheeseHint', lang)}\n\n`;
+  msg += tr('cancelHint', lang);
+
+  return msg;
 }
 
-function cartMessage(cart, lang) {
-  if (!cart.length) return tr('cartEmpty', lang);
-  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  let msg = `${tr('cartTitle', lang)}\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+// ─── Extra Cheese Choice ──────────────────────────────
+
+function extraCheeseChoiceMessage(item, lang = 'en') {
+  const fn = tr('extraCheeseChoice', lang);
+  return typeof fn === 'function' ? fn(item.name, item.price) : fn;
+}
+
+function categoryNextStepMessage(lang = 'en') {
+  const fn = tr('categoryNextStep', lang);
+  return typeof fn === 'function' ? fn : fn;
+}
+
+// ─── Item Added ────────────────────────────────────────
+
+function itemAddedMessage(itemName, qty, price, lang = 'en') {
+  const fn = tr('itemAdded', lang);
+  return typeof fn === 'function' ? fn(itemName, qty, price) : fn;
+}
+
+// ─── Cart ──────────────────────────────────────────────
+
+function cartMessage(cart, lang = 'en') {
+  if (cart.length === 0) {
+    return tr('cartEmpty', lang);
+  }
+
+  let total = 0;
+  let msg = `${tr('cartTitle', lang)}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
   cart.forEach((item, i) => {
-    let name = item.name;
-    if (item.extraCheese) name += ' + 🧀 Extra Cheese';
-    msg += `${i + 1}. ${name} × ${item.qty} — ₹${item.price * item.qty}\n`;
-    if (item.description) msg += `   ${item.description}\n`;
+    const lineTotal = item.price * item.qty;
+    total += lineTotal;
+    let line = `${i + 1}. `;
+    if (item.isCombo) line += '🎉 ';
+    line += `${item.name}`;
+    if (item.size) line += ` (${item.size})`;
+    if (item.extraCheese) line += ` +🧀`;
+    line += ` × ${item.qty} — ₹${lineTotal}`;
+    msg += line + '\n';
   });
-  msg += `\n━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `Subtotal: *₹${total}*\n`;
-  if (total >= 150) msg += `${tr('freeDelivery', lang)}\n`;
-  else msg += `${tr('freeDeliveryGap', lang)(150 - total)}\n`;
-  msg += `\n💵 Payment: *Cash on Delivery*\n\n`;
+
+  msg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `*Total: ₹${total}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
   msg += tr('cartOptions', lang);
+
   return msg;
 }
 
-function locationPromptMessage(lang) { return tr('locationPrompt', lang); }
-function locationReceivedMessage(lang) { return tr('locationReceived', lang); }
+// ─── Address Prompt ────────────────────────────────────
 
-function orderConfirmMessage(cart, details, lang) {
-  const total = cart.reduce((s, i) => s + i.price * i.qty, 0);
-  let msg = `${tr('orderSummary', lang)}\n━━━━━━━━━━━━━━━━━━━━\n\n`;
+function addressPromptMessage(lang = 'en') {
+  return tr('addressPrompt', lang);
+}
+
+// ─── Order Confirm ─────────────────────────────────────
+
+function orderConfirmMessage(cart, address, lang = 'en') {
+  let total = 0;
+  let msg = `${tr('orderSummaryTitle', lang)}\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
   cart.forEach((item, i) => {
-    let name = item.name;
-    if (item.extraCheese) name += ' + 🧀 Extra Cheese';
-    msg += `${i + 1}. ${name} × ${item.qty} — ₹${item.price * item.qty}\n`;
+    const lineTotal = item.price * item.qty;
+    total += lineTotal;
+    let line = `${i + 1}. ${item.name}`;
+    if (item.size) line += ` (${item.size})`;
+    if (item.extraCheese) line += ` +🧀`;
+    line += ` × ${item.qty} — ₹${lineTotal}`;
+    msg += line + '\n';
   });
-  msg += `\n━━━━━━━━━━━━━━━━━━━━\nSubtotal: *₹${total}*\n`;
-  msg += `${tr('freeDelivery', lang)}\n`;
-  msg += `💵 Total: *₹${total}*\n💵 Payment: *Cash on Delivery*\n\n`;
-  if (details.location) msg += `📍 Location: *Received* ✅\n`;
-  if (details.landmark) msg += `📌 Landmark: *${details.landmark}*\n`;
-  if (details.address) msg += `🏠 Address: *${details.address}*\n`;
-  msg += `\n${tr('confirm', lang)}`;
+
+  msg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `*Total: ₹${total}*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  const delivFn = tr('deliveryTo', lang);
+  msg += (typeof delivFn === 'function' ? delivFn(address) : delivFn) + '\n\n';
+  msg += tr('confirmPrompt', lang);
+
   return msg;
 }
 
-function orderPlacedMessage(orderId, total, lang) { return tr('orderPlaced', lang)(orderId, total); }
-function helpMessage(lang) { return `❓ ${STORE_NAME}\n\n*menu* — browse\n*cart* — view cart\n*checkout* — place order\n*combos* — view combos\n*lang* — change language\n*clear* — clear cart\n*reset* — restart`; }
-function unknownMessage(lang) { return tr('generic').unknown?.[lang] || tr('generic').unknown.en; }
-function minOrderMessage(amount, lang) { return tr('minOrder', lang)(amount); }
-function freeDeliveryMessage(lang) { return tr('freeDelivery', lang); }
-function freeDeliveryGapMessage(amount, lang) { return tr('freeDeliveryGap', lang)(amount); }
-function storeClosedMessage(lang = 'en') { return lang === 'kn' ? '😴 ಈಗ ನಾವು ಮುಚ್ಚಿದ್ದೇವೆ.' : lang === 'hi' ? '😴 अभी हम बंद हैं.' : lang === 'ur' ? '😴 ہم ابھی بند ہیں۔' : '😴 We are currently closed.'; }
+// ─── Order Placed ──────────────────────────────────────
 
-function statusMessage(status, orderId, lang) {
-  const entry = tr('status', lang)[status] || tr('status', 'en')[status];
-  return entry ? entry(orderId) : `Order ${orderId}: ${status}`;
+function orderPlacedMessage(orderId, total, lang = 'en') {
+  const fn = tr('orderPlaced', lang);
+  return typeof fn === 'function' ? fn(orderId, total) : fn;
 }
 
-function ownerNotificationMessage(order, dailyOrderNum) {
-  const mapsLink = order.location?.latitude && order.location?.longitude
-    ? `https://www.google.com/maps?q=${order.location.latitude},${order.location.longitude}`
-    : order.address ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.address)}` : '';
-  let msg = `🔔 *NEW ORDER — ${order.order_id}*\n━━━━━━━━━━━━━━━━━━━━\n`;
-  msg += `👤 ${order.user_name}\n📱 ${order.user_id.replace('@c.us', '')}\n`;
-  msg += `🌐 Language: ${order.language}\n\n`;
-  msg += `🛒 *ORDER*\n`;
-  order.items.forEach((item, i) => {
-    msg += `${i + 1}. ${item.name} × ${item.qty} — ₹${item.price * item.qty}\n`;
+// ─── Help ──────────────────────────────────────────────
+
+function helpMessage(lang = 'en') {
+  return tr('help', lang);
+}
+
+// ─── Unknown ───────────────────────────────────────────
+
+function unknownMessage(lang = 'en') {
+  return tr('unknown', lang);
+}
+
+// ─── Store Closed ──────────────────────────────────────
+
+function storeClosedMessage(lang = 'en') {
+  return tr('storeClosed', lang);
+}
+
+// ─── Owner Notification (always in English) ────────────
+
+function ownerNotificationMessage(orderId, userName, userPhone, cart, total, address, dailyOrderNum) {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: 'Asia/Kolkata',
   });
-  msg += `\n💰 *TOTAL: ₹${order.total}*\n🚚 *FREE DELIVERY*\n💵 *CASH ON DELIVERY*\n`;
-  if (order.landmark) msg += `\n📌 Landmark: ${order.landmark}\n`;
-  if (order.address) msg += `🏠 Address: ${order.address}\n`;
-  if (mapsLink) msg += `📍 Map: ${mapsLink}\n`;
-  msg += `\n📦 Today’s order #: ${dailyOrderNum}`;
-  return msg;
-}
+  const dateStr = now.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  });
 
-function allMenuCategoriesMessage(lang) {
-  return mainMenuMessage(lang);
+
+  let msg = `🔔🔔🔔 *NEW ORDER!* 🔔🔔🔔\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n\n`;
+  msg += `📦 *Order #${dailyOrderNum} Today*\n`;
+  msg += `🆔 *ID:* ${orderId}\n`;
+  msg += `🕐 *Time:* ${timeStr} • ${dateStr}\n\n`;
+
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `👤 *CUSTOMER DETAILS*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📛 *Name:* ${userName}\n`;
+  const customerPhone = String(userPhone || '')
+  .replace(/\D/g, '');
+
+msg += `📱 *Phone:* ${customerPhone}\n\n`;
+
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `📍 *DELIVERY LOCATION*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `${address}\n\n`;
+
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `🛒 *ORDER ITEMS*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━\n`;
+
+  cart.forEach((item, i) => {
+    const lineTotal = item.price * item.qty;
+    let line = `  ${i + 1}. *${item.name}*`;
+    if (item.size) line += ` (${item.size})`;
+    if (item.extraCheese) line += ` +🧀Cheese`;
+    line += `\n     × ${item.qty} — ₹${lineTotal}`;
+    msg += line + '\n';
+  });
+
+  msg += `\n━━━━━━━━━━━━━━━━━━━━━\n`;
+  msg += `💰 *TOTAL: ₹${total}*\n`;
+  msg += `💳 *Payment: Cash on Delivery*\n`;
+  msg += `━━━━━━━━━━━━━━━━━━━━━`;
+
+  return msg;
 }
 
 module.exports = {
   languageSelectionMessage,
+  startOrderingMessage,
   welcomeMessage,
   mainMenuMessage,
-  allMenuCategoriesMessage,
   categoryItemsMessage,
   combosMessage,
+  sizeSelectionMessage,
+  extraCheeseChoiceMessage,
+  categoryNextStepMessage,
   itemAddedMessage,
   cartMessage,
-  locationPromptMessage,
-  locationReceivedMessage,
+  addressPromptMessage,
   orderConfirmMessage,
   orderPlacedMessage,
   helpMessage,
   unknownMessage,
-  minOrderMessage,
-  freeDeliveryMessage,
-  freeDeliveryGapMessage,
   storeClosedMessage,
-  statusMessage,
   ownerNotificationMessage,
 };
