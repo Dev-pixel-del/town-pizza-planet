@@ -1,7 +1,7 @@
 require('dns').setServers(['1.1.1.1']);
 
 require('dotenv').config();
-const { app, setWhatsAppClient } = require('./admin/server');
+const { app, setWhatsAppClient, initAdminStore } = require('./admin/server');
 const { initDatabase } = require('./db/database');
 const { startWhatsApp, shutdown } = require('./bot');
 const { statusMessage } = require('./utils/formatter');
@@ -14,6 +14,7 @@ global.__TPP_STATUS_MESSAGE = statusMessage;
 (async () => {
   try {
     await initDatabase();
+    await initAdminStore();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🌐 Town Pizza Planet web server listening on port ${PORT}`);

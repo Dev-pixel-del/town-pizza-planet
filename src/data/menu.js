@@ -21,8 +21,9 @@ const pizzas = [
 const burgers = [
   { id: 'B1', name: 'Veg Burger', price: 99, image: 'B1.jpg' },
   { id: 'B2', name: 'Cheez Burger', price: 129, image: 'B2.jpg' },
-  { id: 'B3', name: 'Double Lamb Burger', price: 149, image: 'B3.jpg' },
+  { id: 'B3', name: 'Double Veg Burger', price: 149, image: 'B3.jpg' },
   { id: 'B4', name: 'Chicken Burger', price: 149, image: 'B4.jpg' },
+  { id: 'B5', name: 'Double Chicken Burger', price: 199, image: 'B5.jpg' },
 ];
 
 const sandwichesAndSides = [
@@ -48,11 +49,30 @@ const milkshakes = [
   { id: 'M8', name: 'Oreo Shake', price: 150, image: 'M8.jpg' },
 ];
 
+// Drinks: water is one menu item with size options shown at add-to-cart time.
+const drinks = [
+  { id: 'D1', name: 'Water', price: 20, image: 'D1.jpg', variants: [
+    { key: 'half', label: '½ Litre', price: 10 },
+    { key: 'one', label: '1 Litre', price: 20 },
+    { key: 'two', label: '2 Litre', price: 30 },
+  ] },
+  { id: 'D2', name: 'Sprite', price: 25, image: 'D2.jpg' },
+  { id: 'D3', name: 'Coca Cola', price: 25, image: 'D3.jpg' },
+  { id: 'D4', name: 'Dailee Pineapple', price: 15, image: 'D4.jpg' },
+  { id: 'D5', name: 'Mountain Dew', price: 25, image: 'D5.jpg' },
+  { id: 'D6', name: '7 Up', price: 25, image: 'D6.jpg' },
+  { id: 'D7', name: 'Tiger (Predator)', price: 40, image: 'D7.jpg' },
+  { id: 'D8', name: 'Bindu Jeera', price: 20, image: 'D8.jpg' },
+  { id: 'D9', name: 'Sting', price: 25, image: 'D9.jpg' },
+  { id: 'D10', name: 'Pepsi', price: 25, image: 'D10.jpg' },
+];
+
 const categories = [
   { key: 'pizzas', name: 'Pizza', emoji: '🍕', items: pizzas },
   { key: 'burgers', name: 'Burgers', emoji: '🍔', items: burgers },
   { key: 'sandwichesAndSides', name: 'Sandwiches & Sides', emoji: '🥪', items: sandwichesAndSides },
   { key: 'milkshakes', name: 'Shakes', emoji: '🥤', items: milkshakes },
+  { key: 'drinks', name: 'Drinks', emoji: '🥤', items: drinks },
 ];
 
 // Exact bestsellers requested by the restaurant.
@@ -96,6 +116,7 @@ module.exports = {
   burgers,
   sandwichesAndSides,
   milkshakes,
+  drinks,
   categories,
   allItems,
   bestsellers,

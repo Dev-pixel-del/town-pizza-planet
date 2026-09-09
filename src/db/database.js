@@ -9,14 +9,17 @@ const path = require('path');
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 const ORDERS_FILE = path.join(DATA_DIR, 'orders.json');
+const AVAILABILITY_FILE = path.join(DATA_DIR, 'availability.json');
 
 let mode = 'file';
 let mongoose = null;
 let SessionModel = null;
 let OrderModel = null;
+let AvailabilityModel = null;
 
 const sessions = new Map();
 const orders = [];
+const availability = new Map();
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -74,13 +77,31 @@ async function initMongo() {
     language: String,
     created_at: { type: Date, index: true },
     updated_at: Date,
+    delivery_zone: String,
+    delivery_zone_id: String,
+    delivery_charge: { type: Number, default: 0 },
+    source: String,
+    estimated_minutes: { type: Number, default: 30 },
   }, { collection: 'orders' });
 
   SessionModel = mongoose.models.TPP_Session || mongoose.model('TPP_Session', sessionSchema);
   OrderModel = mongoose.models.TPP_Order || mongoose.model('TPP_Order', orderSchema);
 
+  const availabilitySchema = new mongoose.Schema({
+    kind: { type: String, required: true },
+    item_id: { type: String, required: true },
+    available: { type: Boolean, required: true, default: true },
+    updated_at: { type: Date, default: Date.now },
+  }, { collection: 'availability' });
+  availabilitySchema.index({ kind: 1, item_id: 1 }, { unique: true });
+  AvailabilityModel = mongoose.models.TPP_Availability || mongoose.model('TPP_Availability', availabilitySchema);
+
   const sessionDocs = await SessionModel.find().lean();
   sessionDocs.forEach(doc => sessions.set(doc.user_id, normalizeSession(doc)));
+
+  const availabilityDocs = await AvailabilityModel.find().lean();
+  availability.clear();
+  availabilityDocs.forEach(doc => availability.set(`${doc.kind}:${doc.item_id}`, Boolean(doc.available)));
 
   const orderDocs = await OrderModel.find().sort({ created_at: -1 }).lean();
   orders.splice(0, orders.length, ...orderDocs.map(normalizeOrder));
@@ -106,6 +127,15 @@ function loadFile() {
     }
   } catch (err) {
     console.warn('⚠️ Could not load orders.json:', err.message);
+  }
+  try {
+    availability.clear();
+    if (fs.existsSync(AVAILABILITY_FILE)) {
+      const raw = JSON.parse(fs.readFileSync(AVAILABILITY_FILE, 'utf8'));
+      if (raw && typeof raw === 'object') Object.entries(raw).forEach(([key, value]) => availability.set(key, Boolean(value)));
+    }
+  } catch (err) {
+    console.warn('⚠️ Could not load availability.json:', err.message);
   }
   mode = 'file';
   console.log(`✅ Local JSON database ready. Sessions: ${sessions.size}, Orders: ${orders.length}`);
@@ -158,6 +188,11 @@ function normalizeOrder(data = {}) {
     status: data.status || 'received',
     created_at: data.created_at instanceof Date ? data.created_at.toISOString() : (data.created_at || nowIso()),
     updated_at: data.updated_at instanceof Date ? data.updated_at.toISOString() : (data.updated_at || nowIso()),
+    delivery_zone: data.delivery_zone || null,
+    delivery_zone_id: data.delivery_zone_id || null,
+    delivery_charge: Number(data.delivery_charge || 0),
+    source: data.source || 'whatsapp',
+    estimated_minutes: Number(data.estimated_minutes || 30),
   };
 }
 
@@ -183,6 +218,29 @@ function persistOrders() {
   ensureDataDir();
   fs.writeFileSync(ORDERS_FILE, JSON.stringify(orders, null, 2));
 }
+
+function getAvailabilityOverride(kind, itemId) {
+  const key = `${String(kind || '').trim().toLowerCase()}:${String(itemId || '').trim().toUpperCase()}`;
+  return availability.has(key) ? availability.get(key) : null;
+}
+
+async function setAvailability(kind, itemId, available) {
+  const k = String(kind || '').trim().toLowerCase();
+  const id = String(itemId || '').trim().toUpperCase();
+  if (!['item', 'combo', 'family'].includes(k) || !id) throw new Error('Invalid availability target');
+  const value = Boolean(available);
+  availability.set(`${k}:${id}`, value);
+  if (mode === 'mongo' && AvailabilityModel) {
+    await AvailabilityModel.updateOne({ kind: k, item_id: id }, { $set: { kind: k, item_id: id, available: value, updated_at: new Date() } }, { upsert: true });
+  } else {
+    ensureDataDir();
+    const out = Object.fromEntries(availability.entries());
+    fs.writeFileSync(AVAILABILITY_FILE, JSON.stringify(out, null, 2));
+  }
+  return value;
+}
+
+function getAllAvailabilityOverrides() { return Object.fromEntries(availability.entries()); }
 
 function getSession(userId) {
   if (!sessions.has(userId)) {
@@ -238,12 +296,17 @@ async function createOrder(userId, userName, items, subtotal, total, details = {
     items,
     subtotal,
     total,
-    free_delivery: true,
+    free_delivery: details.free_delivery === true,
     payment_method: 'COD',
     location: details.location || null,
     landmark: details.landmark || null,
     address: details.address || null,
     language: details.language || 'en',
+    delivery_zone: details.delivery_zone || null,
+    delivery_zone_id: details.delivery_zone_id || null,
+    delivery_charge: Number(details.delivery_charge || 0),
+    source: details.source || 'whatsapp',
+    estimated_minutes: Number(details.estimated_minutes || 30),
     status: 'received',
     created_at: now,
     updated_at: now,
@@ -271,6 +334,8 @@ async function updateOrderStatus(orderId, status) {
   return order;
 }
 
+function getAllOrders() { return orders.slice().reverse(); }
+
 function getOrders(status = null, limit = 100) {
   const filtered = status ? orders.filter(o => o.status === status) : orders;
   return filtered.slice().reverse().slice(0, Math.max(1, Math.min(limit, 500)));
@@ -279,6 +344,16 @@ function getOrders(status = null, limit = 100) {
 function getTodayOrders() {
   const key = todayKey();
   return orders.filter(o => String(o.order_id || '').startsWith(`TPP-${key}`)).slice().reverse();
+}
+
+function getOrdersByPhone(phone, limit = 10) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return [];
+  return orders
+    .filter(o => String(o.user_id || '').replace(/\D/g, '').includes(digits))
+    .slice()
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, Math.max(1, Math.min(Number(limit) || 10, 50)));
 }
 
 function getTodayStats() {
@@ -316,11 +391,16 @@ module.exports = {
   createOrder,
   updateOrderStatus,
   getOrders,
+  getAllOrders,
   getTodayOrders,
   getTodayStats,
   getOrderById,
+  getOrdersByPhone,
   generateOrderId,
   getTodayOrderCount,
   getMongoose,
   getDatabaseMode,
+  getAvailabilityOverride,
+  getAllAvailabilityOverrides,
+  setAvailability,
 };

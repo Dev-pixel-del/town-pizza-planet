@@ -40,6 +40,37 @@ const CLOSE_HOUR = Number(process.env.CLOSE_HOUR || 23);
 
 let client = null;
 
+async function waitForWhatsAppReady(timeoutMs = 15000) {
+  const start = Date.now();
+  while (client && !global.__TPP_WHATSAPP_READY && Date.now() - start < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  return Boolean(client && global.__TPP_WHATSAPP_READY);
+}
+
+async function sendWhatsAppActionSafe(action, attempts = 3) {
+  if (!client) throw new Error('WhatsApp client is not initialized.');
+  const ready = await waitForWhatsAppReady(15000);
+  if (!ready) throw new Error('WhatsApp client is not ready.');
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await action();
+    } catch (err) {
+      lastError = err;
+      const message = String(err?.message || err);
+      const transient = /Execution context was destroyed|Target closed|Session closed|detached|not connected|Protocol error/i.test(message);
+      if (!transient || attempt === attempts) break;
+      await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
+    }
+  }
+  throw lastError || new Error('WhatsApp send failed.');
+}
+
+async function sendWhatsAppMessageSafe(chatId, text, attempts = 3) {
+  return sendWhatsAppActionSafe(() => client.sendMessage(chatId, text), attempts);
+}
+
 global.__TPP_WHATSAPP_READY = false;
 global.__TPP_WHATSAPP_STATUS = 'starting';
 global.__TPP_QR_DATA_URL = null;
@@ -126,7 +157,7 @@ function buildClient() {
 
 async function sendReply(chatId, reply) {
   if (typeof reply === 'string') {
-    return client.sendMessage(chatId, reply);
+    return sendWhatsAppMessageSafe(chatId, reply);
   }
 
   if (!reply || !reply.type) {
@@ -134,21 +165,21 @@ async function sendReply(chatId, reply) {
   }
 
   if (reply.type === 'text') {
-    return client.sendMessage(chatId, reply.body);
+    return sendWhatsAppMessageSafe(chatId, reply.body);
   }
 
   if (reply.type === 'buttons') {
-    return client.sendMessage(
+    return sendWhatsAppActionSafe(() => client.sendMessage(
       chatId,
       ui.makeButtonsObject(reply)
-    );
+    ));
   }
 
   if (reply.type === 'list') {
-    return client.sendMessage(
+    return sendWhatsAppActionSafe(() => client.sendMessage(
       chatId,
       ui.makeListObject(reply)
-    );
+    ));
   }
 
   if (reply.type === 'image') {
@@ -159,13 +190,13 @@ async function sendReply(chatId, reply) {
       return null;
     }
 
-    return client.sendMessage(
+    return sendWhatsAppActionSafe(() => client.sendMessage(
       chatId,
       MessageMedia.fromFilePath(reply.filePath),
       {
         caption: reply.caption || '',
       }
-    );
+    ));
   }
 
   return null;
@@ -375,11 +406,12 @@ async function startWhatsApp() {
       // Free, reliable customer ordering interface: WhatsApp is the entry point;
       // the interactive catalogue/checkout lives on our animated web app.
       if (greetingWords.includes(normalizedText)) {
-        const baseUrl = process.env.PUBLIC_ORDER_URL || '';
+        const baseUrl = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet.onrender.com').replace(/\/$/, '');
         const phone = String(message.from || '').replace(/\D/g, '');
-        const orderUrl = baseUrl ? `${baseUrl.replace(/\/$/, '')}/order?phone=${encodeURIComponent(phone)}` : `/order?phone=${encodeURIComponent(phone)}`;
-        await client.sendMessage(message.from,
-          `👋 *Welcome to ${STORE_NAME}!*\n\n🍕 Order your favourites with our quick online menu.\n\n👉 ${orderUrl}\n\nOpen the link to choose your language, browse the menu, add items to your cart and checkout with Cash on Delivery.`
+        const orderUrl = `${baseUrl}/order?phone=${encodeURIComponent(phone)}&v=2`;
+        await sendWhatsAppMessageSafe(
+          message.from,
+          `👋 *Welcome to ${STORE_NAME}!*\n\n🍕 *Online Ordering*\n\n👉 ${orderUrl}\n\nTap the link to choose your language, browse the animated menu, add items to your cart, and checkout with Cash on Delivery.`
         );
         return;
       }
@@ -414,7 +446,7 @@ async function startWhatsApp() {
           '@c.us';
 
         try {
-          await client.sendMessage(
+          await sendWhatsAppMessageSafe(
             ownerId,
             result.notifyOwner.message
           );

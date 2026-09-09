@@ -36,6 +36,7 @@ const {
   getTotal,
 } = require('../utils/cartManager');
 const ui = require('../ui/whatsappUI');
+const { applyRawMaterialsForOrder } = require('../admin/adminStore');
 
 let parser = null;
 try {
@@ -580,8 +581,18 @@ async function handleMessage(userId, messageText, contactName) {
     let orderId;
     try {
       orderId = await Promise.resolve(
-        createOrder(userId, contactName || 'Customer', cart, total, address)
+        createOrder(userId, contactName || 'Customer', cart.map(item => {
+          const base = findItemById(item.id);
+          return { ...item, category: item.category || base?.category || (String(item.id||'').toUpperCase().startsWith('P') ? 'pizzas' : '') };
+        }), total, address)
       );
+      try {
+        const placed = { order_id: orderId, items: cart };
+        await applyRawMaterialsForOrder(placed, placed.items.map(item => {
+          const base = findItemById(item.id);
+          return { ...item, category: item.category || base?.category || (String(item.id||'').toUpperCase().startsWith('P') ? 'pizzas' : '') };
+        }));
+      } catch (rawErr) { console.error('Raw-material deduction failed for WhatsApp order:', rawErr); }
     } catch (err) {
       console.error('❌ createOrder failed:', err);
       return { replies: [ui.text('😥 I could not place the order. Please try again.')], notifyOwner: null };

@@ -7,3 +7,8 @@ data/*.json
 npm-debug.log*
 .DS_Store
 *.log
+
+# Runtime stock/availability overrides
+data/availability.json
+.wwebjs_cache/
+.wwebjs_cache/
