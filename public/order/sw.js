@@ -1,4 +1,4 @@
-const CACHE = 'tpp-customer-v20';
+const CACHE = 'tpp-customer-v22';
 const SHELL = [
   '/order/',
   '/order/manifest.webmanifest',

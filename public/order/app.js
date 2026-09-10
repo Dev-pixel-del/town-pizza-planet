@@ -579,8 +579,16 @@ async function placeOrder(){
 function updateDeliverySummary(){const zone=document.getElementById('deliveryZone');if(!zone||!state.catalog)return;state.selectedZone=zone.value;const calc=calculateClientDelivery(state.selectedZone);const hint=document.getElementById('deliveryHint');if(hint){if(!calc.valid)hint.innerHTML=`⚠️ ${escapeHtml(calc.error)}`;else if(calc.free)hint.innerHTML=`✅ ${escapeHtml(t('deliveryFree'))}`;else hint.innerHTML=`🚚 ${money(calc.charge)} delivery • ${escapeHtml(t('freeAbove'))} ${money(calc.zone.freeAbove)} · <strong>Add ${money(calc.amountToFree)}</strong> more to get free delivery`;}const dc=document.getElementById('deliveryCharge');if(dc)dc.textContent=calc.valid?(calc.charge?money(calc.charge):t('deliveryFree')):'—';const tn=document.getElementById('checkoutTotal');if(tn)tn.textContent=money(calc.valid?calc.total:cartSubtotal());const zn=document.getElementById('deliveryZoneName');if(zn)zn.textContent=calc.zone?localizedZoneName(calc.zone):'';const btn=document.querySelector('[data-place-order]');if(btn)btn.disabled=!calc.valid||!orderingOpen();}
 function getVoiceConfirmationConfig(order){
   const lang=I18N[order?.language]?order.language:(I18N[state.language]?state.language:'en');
-  const zone=String(order?.delivery_zone||state.selectedZone||'').toLowerCase().trim();
-  const minutes=zone==='devara-hipparagi' ? 30 : 45;
+  const zoneId=String(order?.delivery_zone_id||'').toLowerCase().trim();
+  const zoneName=String(order?.delivery_zone||'').toLowerCase().trim();
+  // Devara Hipparagi is the only 30-minute delivery zone. Match both the stored
+  // zone id and the customer-facing zone name so persisted orders from older
+  // versions still select the correct recording.
+  const isDevaraHipparagi=zoneId==='devara-hipparagi' ||
+    zoneName==='devara hipparagi' ||
+    zoneName==='devara hippargi' ||
+    zoneName==='devara-hipparagi';
+  const minutes=isDevaraHipparagi ? 30 : 45;
   const files={
     en:{30:'en_30.mp3',45:'en_45.mp3'},
     kn:{30:'kn_30.mp3',45:'kn_45.mp3'},
@@ -756,6 +764,7 @@ document.addEventListener('click',async e=>{
   if(btn.hasAttribute('data-fav')){toggleFavorite(btn.dataset.fav);return;}
   if(btn.hasAttribute('data-add')){if(!orderingOpen())return;const id=btn.dataset.add;addItem(id,false);noteViewed(id);refreshVisibleProductCard(id);openCartToast();return;}
   if(btn.hasAttribute('data-change')){const id=btn.dataset.change;changeCartItem(`${id}:plain`,Number(btn.dataset.delta));refreshVisibleProductCard(id);return;}
+  if(btn.hasAttribute('data-add-combo-day')){e.preventDefault();if(!orderingOpen())return;addComboOfDay();return;}
   if(btn.hasAttribute('data-add-pack')){if(!orderingOpen())return;const id=btn.dataset.addPack;addPack(id);refreshVisiblePackCard(id);openCartToast();return;}
   if(btn.hasAttribute('data-pack-change')){const id=btn.dataset.packChange;changeCartItem(`${id}:pack`,Number(btn.dataset.delta));refreshVisiblePackCard(id);return;}
   if(btn.hasAttribute('data-cart-change')){changeCartItem(btn.dataset.cartChange,Number(btn.dataset.delta));renderCartDrawer();return;}
