@@ -142,6 +142,21 @@ function buildClient() {
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        '--disable-extensions',
+        '--disable-default-apps',
+        '--disable-sync',
+        '--disable-translate',
+        '--disable-component-update',
+        '--disable-background-networking',
+        '--disable-notifications',
+        '--disable-print-preview',
+        '--disable-hang-monitor',
+        '--metrics-recording-only',
+        '--mute-audio',
+        '--no-default-browser-check',
+        '--password-store=basic',
+        '--use-mock-keychain',
+        '--renderer-process-limit=2',
         '--no-first-run',
       ],
     },
@@ -487,6 +502,16 @@ async function startWhatsApp() {
 
   await client.initialize();
 
+  if (!global.__TPP_MEMORY_MONITOR) {
+    global.__TPP_MEMORY_MONITOR = setInterval(() => {
+      const m = process.memoryUsage();
+      const rssMb = Math.round(m.rss / 1024 / 1024);
+      const heapMb = Math.round(m.heapUsed / 1024 / 1024);
+      console.log(`🧠 Memory: RSS ${rssMb} MB, heap ${heapMb} MB`);
+    }, 300000);
+    global.__TPP_MEMORY_MONITOR.unref?.();
+  }
+
   return client;
 }
 
@@ -495,6 +520,11 @@ async function startWhatsApp() {
    ============================================================ */
 
 async function shutdown() {
+  if (global.__TPP_MEMORY_MONITOR) {
+    clearInterval(global.__TPP_MEMORY_MONITOR);
+    global.__TPP_MEMORY_MONITOR = null;
+  }
+
   if (!client) {
     return;
   }

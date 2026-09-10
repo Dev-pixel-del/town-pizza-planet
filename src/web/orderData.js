@@ -140,13 +140,6 @@ function getOrderingStatus() {
   const manualClosed = settings.manualClosed === true;
   const paused = settings.pauseNewOrders === true;
   let open = !manualClosed && !paused && inHours;
-  // Preserve old env-driven open behavior only when admin hours have never been changed.
-  if (String(process.env.RESTRICT_HOURS || '').toLowerCase() === 'true' && !manualClosed && !paused) {
-    const openHour = Number(process.env.OPEN_HOUR || 10);
-    const closeHour = Number(process.env.CLOSE_HOUR || 23);
-    const h = Number(parts.hour);
-    open = h >= openHour && h < closeHour;
-  }
   return {
     restricted: true,
     open,
