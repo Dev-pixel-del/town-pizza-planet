@@ -13,7 +13,7 @@ const I18N = {
     name:'Your name', enterName:'Enter your full name', mobile:'Mobile number', enterMobile:'Enter 10-digit mobile number', address:'Delivery address',
     enterAddress:'House / Shop, Street, Area, City', landmark:'Landmark (optional)', enterLandmark:'Nearby landmark',
     deliveryArea:'Delivery area', selectArea:'Select your delivery area', gpsTitle:'Accurate delivery location', gpsHint:'Use your phone’s GPS together with your typed address for accurate delivery.', useGPS:'Use My Current Location',
-    gpsCaptured:'GPS location captured', allowGPS:'Please allow location access in your browser and try again.', map:'Open map ↗',
+    gpsCaptured:'GPS location captured', allowGPS:'Please allow location access in your browser and try again.', map:'Open map ↗', locationCheckTitle:'Confirm your delivery location', locationCheckHint:'We found your approximate location. Check the pin and move it to your exact delivery location if needed.', confirmLocation:'Confirm Location', movePin:'Drag the pin to your exact location', locationConfirmed:'Delivery location confirmed', locationUsingGps:'Using detected GPS location', locationMovedPin:'Location adjusted by map pin', changeLocation:'Change Location', retryLocation:'Try GPS Again', locationMapLoading:'Loading map…', locationMapFailed:'The map could not load. You can still order with your typed address.', locationAccuracy:'Reported accuracy', locationManualNote:'You can move the pin to your house, shop or gate before confirming.',
     payment:'Payment', cod:'Cash on Delivery', codHint:'Pay when your order arrives.', placeOrder:'Place Order', placing:'Placing order…',
     orderConfirmed:'Order Confirmed', wereOnIt:'We’re on it!', received:'Your order has been received by Town Pizza Planet.', arriving:'Estimated arrival', about:'About', minutes:'minutes',
     cashTotal:'Cash on Delivery', keepPhone:'Keep your phone nearby. Our team may call you if we need anything.', backHome:'Back to Home', trackOrder:'Track Order',
@@ -41,7 +41,7 @@ const I18N = {
     name:'ನಿಮ್ಮ ಹೆಸರು', enterName:'ಪೂರ್ಣ ಹೆಸರನ್ನು ನಮೂದಿಸಿ', mobile:'ಮೊಬೈಲ್ ಸಂಖ್ಯೆ', enterMobile:'10 ಅಂಕೆಯ ಮೊಬೈಲ್ ಸಂಖ್ಯೆ', address:'ಡೆಲಿವರಿ ವಿಳಾಸ',
     enterAddress:'ಮನೆ / ಅಂಗಡಿ, ರಸ್ತೆ, ಪ್ರದೇಶ, ನಗರ', landmark:'ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್ (ಐಚ್ಛಿಕ)', enterLandmark:'ಹತ್ತಿರದ ಲ್ಯಾಂಡ್‌ಮಾರ್ಕ್',
     deliveryArea:'ಡೆಲಿವರಿ ಪ್ರದೇಶ', selectArea:'ಡೆಲಿವರಿ ಪ್ರದೇಶ ಆಯ್ಕೆಮಾಡಿ', gpsTitle:'ನಿಖರ ಡೆಲಿವರಿ ಸ್ಥಳ', gpsHint:'ನಿಖರ ಡೆಲಿವರಿಗಾಗಿ GPS ಮತ್ತು ಟೈಪ್ ಮಾಡಿದ ವಿಳಾಸವನ್ನು ಬಳಸಿ.', useGPS:'ನನ್ನ ಸ್ಥಳ ಬಳಸಿ',
-    gpsCaptured:'GPS ಸ್ಥಳ ಸಿಕ್ಕಿದೆ', allowGPS:'ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಸ್ಥಳ ಅನುಮತಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.', map:'ನಕ್ಷೆ ತೆರೆಯಿರಿ ↗',
+    gpsCaptured:'GPS ಸ್ಥಳ ಸಿಕ್ಕಿದೆ', allowGPS:'ಬ್ರೌಸರ್‌ನಲ್ಲಿ ಸ್ಥಳ ಅನುಮತಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.', map:'ನಕ್ಷೆ ತೆರೆಯಿರಿ ↗', locationCheckTitle:'ನಿಮ್ಮ ಡೆಲಿವರಿ ಸ್ಥಳವನ್ನು ದೃಢೀಕರಿಸಿ', locationCheckHint:'ನಿಮ್ಮ ಅಂದಾಜು ಸ್ಥಳ ಸಿಕ್ಕಿದೆ. ಪಿನ್ ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಬೇಕಾದರೆ ನಿಮ್ಮ ನಿಖರ ಡೆಲಿವರಿ ಸ್ಥಳಕ್ಕೆ ಎಳೆಯಿರಿ.', confirmLocation:'ಸ್ಥಳವನ್ನು ದೃಢೀಕರಿಸಿ', movePin:'ನಿಖರ ಸ್ಥಳಕ್ಕೆ ಪಿನ್ ಎಳೆಯಿರಿ', locationConfirmed:'ಡೆಲಿವರಿ ಸ್ಥಳ ದೃಢೀಕರಿಸಲಾಗಿದೆ', locationUsingGps:'ಪತ್ತೆಯಾದ GPS ಸ್ಥಳವನ್ನು ಬಳಸಲಾಗುತ್ತಿದೆ', locationMovedPin:'ಮ್ಯಾಪ್ ಪಿನ್ ಮೂಲಕ ಸ್ಥಳ ಬದಲಿಸಲಾಗಿದೆ', changeLocation:'ಸ್ಥಳ ಬದಲಿಸಿ', retryLocation:'GPS ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ', locationMapLoading:'ಮ್ಯಾಪ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ…', locationMapFailed:'ಮ್ಯಾಪ್ ಲೋಡ್ ಆಗಲಿಲ್ಲ. ನೀವು ಟೈಪ್ ಮಾಡಿದ ವಿಳಾಸದಿಂದಲೂ ಆರ್ಡರ್ ಮಾಡಬಹುದು.', locationAccuracy:'ತೋರಿಸಿದ ನಿಖರತೆ', locationManualNote:'ದೃಢೀಕರಿಸುವ ಮೊದಲು ಪಿನ್ ಅನ್ನು ನಿಮ್ಮ ಮನೆ, ಅಂಗಡಿ ಅಥವಾ ಗೇಟ್‌ಗೆ ಸರಿಸಬಹುದು.',
     payment:'ಪಾವತಿ', cod:'ಕ್ಯಾಶ್ ಆನ್ ಡೆಲಿವರಿ', codHint:'ಆರ್ಡರ್ ಬಂದಾಗ ಪಾವತಿಸಿ.', placeOrder:'ಆರ್ಡರ್ ಮಾಡಿ', placing:'ಆರ್ಡರ್ ಮಾಡಲಾಗುತ್ತಿದೆ…',
     orderConfirmed:'ಆರ್ಡರ್ ದೃಢಪಟ್ಟಿದೆ', wereOnIt:'ನಾವು ಪ್ರಾರಂಭಿಸಿದ್ದೇವೆ!', received:'ನಿಮ್ಮ ಆರ್ಡರ್ ಟೌನ್ ಪಿಜ್ಜಾ ಪ್ಲಾನೆಟ್‌ಗೆ ಬಂದಿದೆ.', arriving:'ಅಂದಾಜು ಆಗಮನ', about:'ಸುಮಾರು', minutes:'ನಿಮಿಷಗಳು',
     cashTotal:'ಕ್ಯಾಶ್ ಆನ್ ಡೆಲಿವರಿ', keepPhone:'ಫೋನ್ ಹತ್ತಿರ ಇಡಿ. ಅಗತ್ಯವಿದ್ದರೆ ತಂಡ ಕರೆ ಮಾಡಬಹುದು.', backHome:'ಮುಖಪುಟಕ್ಕೆ', trackOrder:'ಆರ್ಡರ್ ಟ್ರ್ಯಾಕ್',
@@ -69,7 +69,7 @@ const I18N = {
     name:'आपका नाम', enterName:'पूरा नाम दर्ज करें', mobile:'मोबाइल नंबर', enterMobile:'10 अंकों का मोबाइल नंबर', address:'डिलीवरी पता',
     enterAddress:'घर / दुकान, सड़क, क्षेत्र, शहर', landmark:'लैंडमार्क (वैकल्पिक)', enterLandmark:'पास का लैंडमार्क',
     deliveryArea:'डिलीवरी क्षेत्र', selectArea:'डिलीवरी क्षेत्र चुनें', gpsTitle:'सटीक डिलीवरी लोकेशन', gpsHint:'सटीक डिलीवरी के लिए GPS और लिखा हुआ पता दोनों उपयोग करें।', useGPS:'मेरी वर्तमान लोकेशन लें',
-    gpsCaptured:'GPS लोकेशन मिल गई', allowGPS:'ब्राउज़र में लोकेशन की अनुमति दें और फिर कोशिश करें।', map:'मैप खोलें ↗',
+    gpsCaptured:'GPS लोकेशन मिल गई', allowGPS:'ब्राउज़र में लोकेशन की अनुमति दें और फिर कोशिश करें।', map:'मैप खोलें ↗', locationCheckTitle:'अपना डिलीवरी स्थान पक्का करें', locationCheckHint:'हमें आपका अनुमानित स्थान मिल गया है। पिन देखें और जरूरत हो तो उसे अपने सही डिलीवरी स्थान पर खींचें।', confirmLocation:'लोकेशन कन्फर्म करें', movePin:'पिन को अपने सही स्थान पर खींचें', locationConfirmed:'डिलीवरी लोकेशन कन्फर्म हो गई', locationUsingGps:'मिली हुई GPS लोकेशन इस्तेमाल हो रही है', locationMovedPin:'मैप पिन से लोकेशन बदली गई', changeLocation:'लोकेशन बदलें', retryLocation:'GPS फिर कोशिश करें', locationMapLoading:'मैप लोड हो रहा है…', locationMapFailed:'मैप लोड नहीं हो सका। आप लिखे हुए पते से भी ऑर्डर कर सकते हैं।', locationAccuracy:'बताई गई सटीकता', locationManualNote:'कन्फर्म करने से पहले पिन को अपने घर, दुकान या गेट पर ले जाएँ।',
     payment:'भुगतान', cod:'कैश ऑन डिलीवरी', codHint:'ऑर्डर आने पर भुगतान करें।', placeOrder:'ऑर्डर करें', placing:'ऑर्डर भेजा जा रहा है…',
     orderConfirmed:'ऑर्डर कन्फर्म', wereOnIt:'हम तैयार हैं!', received:'आपका ऑर्डर टाउन पिज़्ज़ा प्लैनेट को मिल गया है।', arriving:'अनुमानित आगमन', about:'लगभग', minutes:'मिनट',
     cashTotal:'कैश ऑन डिलीवरी', keepPhone:'फोन पास रखें। ज़रूरत होने पर हमारी टीम कॉल कर सकती है।', backHome:'होम पर जाएँ', trackOrder:'ऑर्डर ट्रैक करें',
@@ -97,7 +97,7 @@ const I18N = {
     name:'آپ کا نام', enterName:'پورا نام لکھیں', mobile:'موبائل نمبر', enterMobile:'10 ہندسوں کا موبائل نمبر', address:'ڈیلیوری پتہ',
     enterAddress:'گھر / دکان، سڑک، علاقہ، شہر', landmark:'لینڈ مارک (اختیاری)', enterLandmark:'قریبی لینڈ مارک',
     deliveryArea:'ڈیلیوری علاقہ', selectArea:'ڈیلیوری علاقہ منتخب کریں', gpsTitle:'درست ڈیلیوری لوکیشن', gpsHint:'درست ڈیلیوری کے لیے GPS اور لکھا ہوا پتہ دونوں استعمال کریں۔', useGPS:'میری موجودہ لوکیشن استعمال کریں',
-    gpsCaptured:'GPS لوکیشن حاصل ہوگئی', allowGPS:'براؤزر میں لوکیشن کی اجازت دیں اور دوبارہ کوشش کریں۔', map:'نقشہ کھولیں ↗',
+    gpsCaptured:'GPS لوکیشن حاصل ہوگئی', allowGPS:'براؤزر میں لوکیشن کی اجازت دیں اور دوبارہ کوشش کریں۔', map:'نقشہ کھولیں ↗', locationCheckTitle:'اپنی ڈیلیوری لوکیشن کی تصدیق کریں', locationCheckHint:'ہم نے آپ کی اندازاً لوکیشن تلاش کرلی ہے۔ پن دیکھیں اور ضرورت ہو تو اسے اپنی صحیح ڈیلیوری لوکیشن تک منتقل کریں۔', confirmLocation:'لوکیشن کی تصدیق کریں', movePin:'پن کو اپنی صحیح لوکیشن تک منتقل کریں', locationConfirmed:'ڈیلیوری لوکیشن کی تصدیق ہوگئی', locationUsingGps:'حاصل شدہ GPS لوکیشن استعمال ہورہی ہے', locationMovedPin:'میپ پن سے لوکیشن بدلی گئی', changeLocation:'لوکیشن بدلیں', retryLocation:'GPS دوبارہ آزمائیں', locationMapLoading:'نقشہ لوڈ ہورہا ہے…', locationMapFailed:'نقشہ لوڈ نہیں ہوسکا۔ آپ لکھے ہوئے پتے کے ساتھ بھی آرڈر کرسکتے ہیں۔', locationAccuracy:'بتائی گئی درستگی', locationManualNote:'تصدیق سے پہلے پن کو اپنے گھر، دکان یا گیٹ تک منتقل کرسکتے ہیں.',
     payment:'ادائیگی', cod:'کیش آن ڈیلیوری', codHint:'آرڈر آنے پر ادائیگی کریں۔', placeOrder:'آرڈر کریں', placing:'آرڈر بھیجا جا رہا ہے…',
     orderConfirmed:'آرڈر کی تصدیق ہوگئی', wereOnIt:'ہم کام شروع کر چکے ہیں!', received:'آپ کا آرڈر ٹاؤن پیزا پلینیٹ کو موصول ہوگیا ہے۔', arriving:'متوقع آمد', about:'تقریباً', minutes:'منٹ',
     cashTotal:'کیش آن ڈیلیوری', keepPhone:'فون قریب رکھیں۔ ضرورت ہونے پر ہماری ٹیم کال کر سکتی ہے۔', backHome:'ہوم پر جائیں', trackOrder:'آرڈر ٹریک کریں',
@@ -168,6 +168,8 @@ const state = {
   recentViewed:loadJson('tpp_recent_viewed',[]),
   phone:normalizePhone(new URLSearchParams(location.search).get('phone') || ''),
   location:null,
+  pendingLocation:null,
+  locationPicker:null,
   selectedZone:'devara-hipparagi',
   lastOrder:loadJson('tpp_last_order',null),
   orderParam:new URLSearchParams(location.search).get('order') || '',
@@ -269,7 +271,7 @@ function applyTheme(){document.documentElement.dataset.theme=state.theme;documen
 function updateThemeHeader(){if(themeToggleBtn){const light=state.theme==='light';themeToggleBtn.setAttribute('aria-pressed',String(light));themeToggleBtn.title=light?t('darkMode'):t('lightMode');themeToggleBtn.innerHTML=`<span class="theme-icon">${light?'🌙':'☀️'}</span><span>${escapeHtml(light?t('darkMode'):t('lightMode'))}</span>`;}const meta=document.getElementById('themeColorMeta');if(meta)meta.content=state.theme==='light'?'#f5ecdc':'#120f0d';}
 function toggleTheme(){state.theme=state.theme==='light'?'dark':'light';localStorage.setItem('tpp_theme',state.theme);applyTheme();}
 function applyLanguageDir(){document.documentElement.lang=state.language==='kn'?'kn':state.language==='hi'?'hi':state.language==='ur'?'ur':'en';document.documentElement.dir=state.language==='ur'?'rtl':'ltr';}
-function render(html,preserveScroll=false){const gate=(!orderingOpen()&&state.view!=='language'&&state.view!=='tracking')?closedOrderingBanner():'';const full=gate+html;if(preserveScroll)preserveRender(full);else{app.innerHTML=`<div class="view-enter">${full}</div>`;updateCartBadge();requestAnimationFrame(()=>window.scrollTo({top:0,behavior:'instant'}));} applyLanguageDir(); applyTheme(); updateLanguageHeader(); updateVegHeader(); updateNonVegHeader();}
+function render(html,preserveScroll=false){const gate=(!orderingOpen()&&state.view!=='language'&&state.view!=='tracking')?closedOrderingBanner():'';const full=gate+html;destroyLocationMap();if(preserveScroll)preserveRender(full);else{app.innerHTML=`<div class="view-enter">${full}</div>`;updateCartBadge();requestAnimationFrame(()=>window.scrollTo({top:0,behavior:'instant'}));} applyLanguageDir(); applyTheme(); updateLanguageHeader(); updateVegHeader(); updateNonVegHeader();requestAnimationFrame(()=>{if(state.view==='checkout'&&state.pendingLocation)initLocationPicker();});}
 function setView(view,preserveScroll=false){state.view=view;renderView(preserveScroll);}
 function openCart(){renderCartDrawer();cartDrawer.classList.add('open');scrim.classList.add('open');cartDrawer.setAttribute('aria-hidden','false');}
 function closeCart(){cartDrawer.classList.remove('open');scrim.classList.remove('open');cartDrawer.setAttribute('aria-hidden','true');}
@@ -527,7 +529,8 @@ function checkout(){
       <div class="field"><label>${escapeHtml(t('address'))}</label><textarea id="customerAddress" placeholder="${escapeHtml(t('enterAddress'))}" autocomplete="street-address"></textarea></div>
       <div class="field"><label>${escapeHtml(t('landmark'))}</label><input id="customerLandmark" placeholder="${escapeHtml(t('enterLandmark'))}"></div>
       <div class="field"><label>${escapeHtml(t('restaurantNote'))}</label><textarea id="restaurantNote" class="restaurant-note" maxlength="300" placeholder="${escapeHtml(t('restaurantNotePlaceholder'))}" rows="2"></textarea></div>
-      <div class="gps-card ${loc?'captured':''}"><div class="gps-icon">📍</div><div class="gps-copy"><strong>${escapeHtml(t('gpsTitle'))}</strong><p>${loc?`${escapeHtml(t('gpsCaptured'))} • ±${Math.round(loc.accuracy||0)} m`:escapeHtml(t('gpsHint'))}</p>${loc?`<small>${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)} · <a href="https://maps.google.com/?q=${loc.latitude},${loc.longitude}" target="_blank" rel="noopener">${escapeHtml(t('map'))}</a></small>`:''}<div id="gpsError" class="gps-error"></div></div><button type="button" class="primary-btn gps-btn" data-get-gps>📍 ${escapeHtml(t('useGPS'))}</button></div>
+      <div class="gps-card ${loc?'captured':''}"><div class="gps-icon">📍</div><div class="gps-copy"><strong>${escapeHtml(loc?t('locationConfirmed'):t('gpsTitle'))}</strong><p>${loc?`${escapeHtml(loc.source==='map_pin'?t('locationMovedPin'):t('locationUsingGps'))} • ±${Math.round(loc.accuracy||0)} m`:escapeHtml(t('gpsHint'))}</p>${loc?`<small>${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)} · <a href="https://maps.google.com/?q=${loc.latitude},${loc.longitude}" target="_blank" rel="noopener">${escapeHtml(t('map'))}</a></small>`:''}<div id="gpsError" class="gps-error"></div></div><button type="button" class="primary-btn gps-btn" data-get-gps>${loc?'📍 '+escapeHtml(t('changeLocation')):'📍 '+escapeHtml(t('useGPS'))}</button></div>
+      ${state.pendingLocation?`<div class="location-picker-card"><div class="location-picker-head"><div><p class="eyebrow">${escapeHtml(t('locationCheckTitle'))}</p><h3>📍 ${escapeHtml(t('locationCheckTitle'))}</h3></div></div><p class="location-picker-hint">${escapeHtml(t('locationCheckHint'))}</p><div id="locationMap" class="location-map"><div class="location-map-loading">${escapeHtml(t('locationMapLoading'))}</div></div><div class="location-picker-status"><strong id="locationPinStatus">${escapeHtml(state.pendingLocation.manualMoved?t('locationMovedPin'):t('locationUsingGps'))}</strong><span id="locationAccuracyStatus">±${Math.round(state.pendingLocation.accuracy||0)} m</span></div><div class="location-picker-actions"><button type="button" class="primary-btn wide" data-location-confirm>✅ ${escapeHtml(t('confirmLocation'))}</button><button type="button" class="secondary-btn wide" data-location-retry>📍 ${escapeHtml(t('retryLocation'))}</button></div><small class="location-picker-note">${escapeHtml(t('locationManualNote'))}</small></div>`:''}
       <div class="payment-card"><span>💵</span><div><strong>${escapeHtml(t('cod'))}</strong><div class="inline-note">${escapeHtml(t('codHint'))}</div></div><span class="check">✓</span></div>
       <div class="order-summary"><p class="eyebrow">${escapeHtml(t('yourOrder'))}</p>${state.cart.map(x=>`<div class="summary-line"><span>${escapeHtml(x.name)} × ${x.qty}</span><strong>${money(x.price*x.qty)}</strong></div>`).join('')}<div class="summary-line"><span>${escapeHtml(t('subtotal'))}</span><strong>${money(cartSubtotal())}</strong></div><div class="summary-line"><span>${escapeHtml(t('delivery'))} <small id="deliveryZoneName">${calc.zone?escapeHtml(localizedZoneName(calc.zone)):''}</small></span><strong id="deliveryCharge">${calc.valid?(calc.charge?money(calc.charge):t('deliveryFree')):'—'}</strong></div><div class="summary-line total-line"><span>${escapeHtml(t('total'))}</span><strong id="checkoutTotal">${calc.valid?money(calc.total):money(cartSubtotal())}</strong></div></div>
       <button type="button" class="primary-btn wide place-btn" data-place-order ${(!orderingOpen()||!calc.valid)?'disabled':''}>${!orderingOpen()?escapeHtml(t('closed')):escapeHtml(t('placeOrder'))} <span>✓</span></button><p class="form-footnote">${!orderingOpen()?escapeHtml(t('orderingUnavailable')):''}</p>
@@ -537,43 +540,17 @@ function checkout(){
   restoreCheckoutDraft();
 }
 
-function getGPS(){
-  const error=document.getElementById('gpsError');
-  if(error) error.textContent='';
-  if(!window.isSecureContext && location.hostname!=='localhost' && location.hostname!=='127.0.0.1'){
-    if(error) error.textContent='Location access requires a secure HTTPS page. You can still order using your typed address.';
-    return;
-  }
-  if(!('geolocation' in navigator)){
-    if(error) error.textContent=escapeHtml(t('allowGPS'));
-    return;
-  }
-  const btn=document.querySelector('[data-get-gps]');
-  if(btn){btn.disabled=true;btn.innerHTML=`📍 ${escapeHtml(t('locating'))}`;}
-  const finish=(loc, warning='')=>{
-    state.location=loc;
-    const card=document.querySelector('.gps-card');
-    card?.classList.add('captured');
-    const copy=card?.querySelector('.gps-copy');
-    if(copy) copy.innerHTML=`<strong>${escapeHtml(t('gpsTitle'))}</strong><p>${escapeHtml(t('gpsCaptured'))} • ±${Math.round(loc.accuracy||0)} m</p><small>${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)} · <a href="https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}" target="_blank" rel="noopener">${escapeHtml(t('map'))}</a></small><div id="gpsError" class="gps-error">${warning?escapeHtml(warning):''}</div>`;
-    if(btn){btn.disabled=false;btn.innerHTML=`📍 ${escapeHtml(t('gpsCaptured'))}`;}
-  };
-  const attempt=(cb)=>navigator.geolocation.getCurrentPosition(pos=>cb({latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:Number(pos.coords.accuracy||999999),capturedAt:new Date().toISOString()}),err=>cb(null,err),{enableHighAccuracy:true,timeout:25000,maximumAge:0});
-  attempt((first,err1)=>{
-    if(first){
-      // A second fresh reading is useful on phones where the first fix is a coarse Wi‑Fi/cell estimate.
-      if(first.accuracy<=120){ finish(first); return; }
-      attempt((second,err2)=>{
-        const best=second && second.accuracy<first.accuracy ? second : first;
-        const warning=best.accuracy>500 ? 'Location accuracy is low. Please verify the map pin, or type your address manually.' : '';
-        finish(best,warning);
-      });
-      return;
-    }
-    if(error) error.textContent=`${escapeHtml(t('allowGPS'))} (${escapeHtml(err1?.message||'location unavailable')})`;
-    if(btn){btn.disabled=false;btn.innerHTML=`📍 ${escapeHtml(t('useGPS'))}`;}
-  });
-}
+let leafletLoaderPromise=null;
+function destroyLocationMap(){try{if(state.locationPicker?.map){state.locationPicker.map.remove();}}catch{} state.locationPicker=null;}
+function ensureLocationStyles(){if(document.getElementById('tpp-location-picker-styles'))return;const st=document.createElement('style');st.id='tpp-location-picker-styles';st.textContent=`.location-picker-card{margin-top:14px;padding:16px;border:1px solid rgba(255,179,71,.35);border-radius:22px;background:linear-gradient(145deg,rgba(255,179,71,.08),rgba(255,120,90,.035));box-shadow:0 18px 50px rgba(0,0,0,.12)}.location-picker-head h3{margin:0;font-size:20px}.location-picker-hint{margin:6px 0 12px;color:var(--muted);line-height:1.5}.location-map{height:330px;border-radius:18px;overflow:hidden;background:#e5e7eb;position:relative;z-index:1}.location-map .leaflet-container{font:inherit}.location-map-loading{height:100%;display:grid;place-items:center;padding:20px;text-align:center;color:#444;font-weight:700}.location-picker-status{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:10px 2px 0;font-size:13px}.location-picker-status span{opacity:.72;font-variant-numeric:tabular-nums}.location-picker-actions{display:grid;gap:9px;margin-top:12px}.location-picker-note{display:block;margin-top:10px;color:var(--muted);line-height:1.45}.location-picker-card .leaflet-control-attribution{font-size:9px}.location-picker-card .leaflet-marker-icon{filter:drop-shadow(0 3px 5px rgba(0,0,0,.3))}@media(max-width:680px){.location-map{height:360px}.location-picker-card{padding:13px}.location-picker-status{align-items:flex-start;flex-direction:column;gap:4px}}`;document.head.appendChild(st);}
+async function ensureLeaflet(){if(window.L)return window.L;if(leafletLoaderPromise)return leafletLoaderPromise;leafletLoaderPromise=new Promise((resolve,reject)=>{const existing=document.querySelector('script[data-tpp-leaflet]');const finish=()=>window.L?resolve(window.L):reject(new Error('Leaflet unavailable'));if(existing){existing.addEventListener('load',finish,{once:true});existing.addEventListener('error',()=>reject(new Error('Leaflet failed')),{once:true});return;}const link=document.createElement('link');link.rel='stylesheet';link.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';link.crossOrigin='anonymous';document.head.appendChild(link);const script=document.createElement('script');script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';script.async=true;script.defer=true;script.crossOrigin='anonymous';script.dataset.tppLeaflet='1';script.onload=finish;script.onerror=()=>reject(new Error('Leaflet failed'));document.head.appendChild(script);});try{return await leafletLoaderPromise;}catch(e){leafletLoaderPromise=null;throw e;}}
+function normalizeLocation(pos){const c=pos?.coords||{};const lat=Number(c.latitude),lng=Number(c.longitude),accuracy=Number(c.accuracy||999999);if(!Number.isFinite(lat)||!Number.isFinite(lng)||lat<-90||lat>90||lng<-180||lng>180)return null;return {latitude:lat,longitude:lng,accuracy:accuracy>0?accuracy:999999,capturedAt:new Date().toISOString(),source:'gps',manualMoved:false};}
+function locationErrorText(err){if(!err)return 'Location unavailable.';if(err.code===1)return t('allowGPS');if(err.code===2)return 'Your device could not determine a location. Please try again outdoors or use your address.';if(err.code===3)return 'Location took too long. Please try again.';return err.message||'Location unavailable.';}
+async function getFreshBestLocation(){const readings=[];let lastErr=null;const attempt=()=>new Promise(resolve=>navigator.geolocation.getCurrentPosition(pos=>resolve(normalizeLocation(pos)),err=>{lastErr=err;resolve(null)},{enableHighAccuracy:true,timeout:12000,maximumAge:0}));for(let i=0;i<3;i++){const reading=await attempt();if(reading)readings.push(reading);const best=readings.reduce((a,b)=>!a||b.accuracy<a.accuracy?b:a,null);if(best&&best.accuracy<=50)break;}if(!readings.length)throw new Error(locationErrorText(lastErr));return readings.reduce((a,b)=>!a||b.accuracy<a.accuracy?b:a,null);}
+async function getGPS(){const error=document.getElementById('gpsError');if(error)error.textContent='';if(!window.isSecureContext&&location.hostname!=='localhost'&&location.hostname!=='127.0.0.1'){if(error)error.textContent='Location access requires a secure HTTPS page. You can still order using your typed address.';return;}if(!('geolocation' in navigator)){if(error)error.textContent=escapeHtml(t('allowGPS'));return;}const btn=document.querySelector('[data-get-gps]');if(btn){btn.disabled=true;btn.innerHTML=`📍 ${escapeHtml(t('locating'))}`;}destroyLocationMap();try{const best=await getFreshBestLocation();state.pendingLocation=best;renderView(true);}catch(err){if(error)error.textContent=escapeHtml(err.message||locationErrorText(null));if(btn){btn.disabled=false;btn.innerHTML=`📍 ${escapeHtml(state.location?t('changeLocation'):t('useGPS'))}`;}}}
+async function initLocationPicker(){ensureLocationStyles();const el=document.getElementById('locationMap');const loc=state.pendingLocation;if(!el||!loc)return;try{const L=await ensureLeaflet();if(!document.getElementById('locationMap'))return;el.innerHTML='';const map=L.map(el,{zoomControl:true,attributionControl:true}).setView([loc.latitude,loc.longitude],18);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:20,attribution:'&copy; OpenStreetMap contributors'}).addTo(map);const marker=L.marker([loc.latitude,loc.longitude],{draggable:true,autoPan:true}).addTo(map);const circle=L.circle([loc.latitude,loc.longitude],{radius:Math.min(Math.max(Number(loc.accuracy)||0,10),500),weight:1,fillOpacity:.08}).addTo(map);state.locationPicker={map,marker,circle,initialAccuracy:loc.accuracy};const update=(lat,lng,manual)=>{if(!state.pendingLocation)return;state.pendingLocation.latitude=Number(lat);state.pendingLocation.longitude=Number(lng);state.pendingLocation.manualMoved=Boolean(manual);if(manual)state.pendingLocation.source='map_pin';const status=document.getElementById('locationPinStatus');if(status)status.textContent=t(manual?'locationMovedPin':'locationUsingGps');};marker.on('dragend',()=>{const p=marker.getLatLng();update(p.lat,p.lng,true);});map.on('click',e=>{marker.setLatLng(e.latlng);update(e.latlng.lat,e.latlng.lng,true);});requestAnimationFrame(()=>map.invalidateSize());}catch(err){el.innerHTML=`<div class="location-map-loading">${escapeHtml(t('locationMapFailed'))}</div>`;}}
+function confirmLocation(){const p=state.pendingLocation;if(!p)return;state.location={latitude:Number(p.latitude),longitude:Number(p.longitude),accuracy:Number(p.accuracy||0),capturedAt:p.capturedAt||new Date().toISOString(),confirmedAt:new Date().toISOString(),source:p.manualMoved?'map_pin':'gps'};state.pendingLocation=null;destroyLocationMap();renderView(true);}
+
 
 async function placeOrder(){
   const name=document.getElementById('customerName')?.value.trim();const phone=normalizePhone(document.getElementById('customerPhone')?.value||'');const address=document.getElementById('customerAddress')?.value.trim();const landmark=document.getElementById('customerLandmark')?.value.trim();const restaurantNote=document.getElementById('restaurantNote')?.value.trim()||'';const deliveryZone=document.getElementById('deliveryZone')?.value||state.selectedZone;const calc=calculateClientDelivery(deliveryZone);
@@ -728,6 +705,8 @@ document.addEventListener('click',async e=>{
   if(btn.hasAttribute('data-checkout')){e.preventDefault();e.stopPropagation();if(!state.cart.length){notifyToast('🛒 '+t('cartEmpty'));return;}closeCart();setView('checkout');return;}
   if(btn.hasAttribute('data-place-order')){e.preventDefault();e.stopPropagation();if(btn.disabled||btn.dataset.submitting==='1')return;btn.dataset.submitting='1';try{await placeOrder();}finally{if(document.querySelector('[data-place-order]')===btn)delete btn.dataset.submitting;}return;}
   if(btn.hasAttribute('data-get-gps')){e.preventDefault();e.stopPropagation();if(btn.disabled)return;getGPS();return;}
+  if(btn.hasAttribute('data-location-confirm')){e.preventDefault();e.stopPropagation();confirmLocation();return;}
+  if(btn.hasAttribute('data-location-retry')){e.preventDefault();e.stopPropagation();getGPS();return;}
   if(btn.hasAttribute('data-view')){const v=btn.dataset.view;if(v==='menu'){state.category=null;state.menuSpecial=null;state.search='';state.filter='all';}setView(v);return;}
   if(btn.hasAttribute('data-category')){state.menuSpecial=null;state.category=btn.dataset.category;state.search='';state.filter='all';renderView();return;}
   if(btn.hasAttribute('data-filter')){state.filter=btn.dataset.filter;renderView(true);return;}
@@ -752,6 +731,59 @@ function openCartToast(){ /* intentionally no visual page/cart pulse on add; avo
 window.addEventListener('online',()=>document.body.classList.remove('offline'));window.addEventListener('offline',()=>document.body.classList.add('offline'));
 
 function ensureUxStyles(){if(document.getElementById('tpp-v6-ux-styles'))return;const st=document.createElement('style');st.id='tpp-v6-ux-styles';st.textContent=`.ordering-closed-banner{display:flex;gap:14px;align-items:flex-start;margin:12px 0 18px;padding:16px 18px;border:1px solid rgba(255,120,90,.35);background:linear-gradient(145deg,rgba(255,120,90,.12),rgba(255,179,71,.06));border-radius:20px}.ordering-closed-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(255,120,90,.16);font-size:20px;flex:0 0 auto}.ordering-closed-banner strong{font-size:17px}.ordering-closed-banner p{margin:4px 0;color:var(--muted)}.ordering-closed-calls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.ordering-closed-calls a{display:inline-block;padding:8px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);text-decoration:none;font-weight:800;font-size:12px}.gps-btn,.place-btn{pointer-events:auto!important;touch-action:manipulation!important;user-select:none;-webkit-tap-highlight-color:transparent;position:relative;z-index:20}.eta-ring{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box}.eta-ring strong#etaTime{font-size:27px;letter-spacing:.02em;line-height:1;white-space:nowrap;display:block;min-width:74px;text-align:center;font-variant-numeric:tabular-nums}@media(max-width:680px){.ordering-closed-banner{padding:13px}.ordering-closed-banner strong{font-size:15px}}`;st.textContent += `.combo-day-card{margin:16px 0;border:1px solid rgba(255,179,71,.5);border-radius:22px;padding:14px;background:linear-gradient(135deg,rgba(255,179,71,.11),rgba(255,111,44,.04));box-shadow:0 14px 40px rgba(255,140,40,.08)}.combo-day-badge{font-size:11px;font-weight:900;letter-spacing:.12em;color:#ffb34f;margin-bottom:10px}.combo-day-inner{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center}.combo-day-media img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:16px}.combo-day-copy h2{margin:0 0 6px}.combo-day-copy p{margin:0 0 8px}.combo-day-price{display:flex;align-items:center;gap:8px;margin:10px 0}.combo-day-price del{opacity:.6}.combo-day-price strong{font-size:25px;color:#ffb34f}.combo-day-price span{font-size:11px;color:#86efac}.combo-day-added{padding:10px 12px;border-radius:12px;background:rgba(34,197,94,.12);color:#bbf7d0;font-weight:800}.marketing-combo-day{margin:8px auto 0;text-align:center;padding:8px 12px;border:1px solid rgba(255,179,71,.35);border-radius:999px;max-width:max-content;font-weight:800;color:#ffcf76}.driver-tracking-card{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0;padding:13px;border:1px solid rgba(255,179,71,.35);border-radius:16px;background:rgba(255,179,71,.07)}.driver-tracking-card div{display:grid;gap:3px}.driver-tracking-card strong{font-size:17px}.driver-tracking-card span{font-size:12px;opacity:.75}@media(max-width:680px){.combo-day-inner{grid-template-columns:1fr}.combo-day-media img{max-height:190px}.driver-tracking-card{align-items:flex-start;flex-direction:column}.driver-tracking-card .contact-btn{width:100%;text-align:center}}`;document.head.appendChild(st)}
+
+
+/* V18 Customer PWA: installable app experience */
+function setupCustomerPWA(){
+  try{
+    if(!document.querySelector('link[rel="manifest"]')){
+      const link=document.createElement('link');
+      link.rel='manifest';
+      link.href='/order/manifest.webmanifest';
+      document.head.appendChild(link);
+    }
+    const addMeta=(name,content)=>{if(!document.querySelector(`meta[name="${name}"]`)){const m=document.createElement('meta');m.name=name;m.content=content;document.head.appendChild(m);}};
+    addMeta('mobile-web-app-capable','yes');
+    addMeta('apple-mobile-web-app-capable','yes');
+    addMeta('apple-mobile-web-app-status-bar-style','black-translucent');
+    addMeta('apple-mobile-web-app-title','Town Pizza Planet');
+
+    const standalone=window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone===true;
+    if(!standalone && !document.getElementById('tppInstallAppBtn')){
+      const style=document.createElement('style');
+      style.id='tpp-pwa-install-style';
+      style.textContent=`#tppInstallAppBtn{position:fixed;right:14px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:9998;display:none;align-items:center;gap:8px;padding:11px 15px;border:1px solid rgba(255,179,71,.45);border-radius:999px;background:rgba(28,22,18,.96);color:#fff3df;box-shadow:0 10px 30px rgba(0,0,0,.28);font:800 13px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);cursor:pointer}#tppInstallAppBtn.show{display:flex}@media(min-width:681px){#tppInstallAppBtn{bottom:24px}}`;
+      document.head.appendChild(style);
+      const btn=document.createElement('button');
+      btn.id='tppInstallAppBtn';
+      btn.type='button';
+      btn.setAttribute('aria-label','Install Town Pizza Planet');
+      btn.innerHTML='<span>📲</span><span>Install Customer App</span>';
+      document.body.appendChild(btn);
+      let deferredPrompt=null;
+      window.addEventListener('beforeinstallprompt',e=>{
+        e.preventDefault();
+        deferredPrompt=e;
+        btn.classList.add('show');
+      });
+      btn.addEventListener('click',async()=>{
+        if(!deferredPrompt)return;
+        deferredPrompt.prompt();
+        try{await deferredPrompt.userChoice;}catch{}
+        deferredPrompt=null;
+        btn.classList.remove('show');
+      });
+      window.addEventListener('appinstalled',()=>{deferredPrompt=null;btn.classList.remove('show');});
+    }
+
+    if('serviceWorker' in navigator){
+      window.addEventListener('load',()=>{
+        navigator.serviceWorker.register('/order/sw.js',{scope:'/order/'}).catch(err=>console.warn('PWA service worker registration failed:',err));
+      });
+    }
+  }catch(err){console.warn('Customer PWA setup failed:',err);}
+}
+setupCustomerPWA();
 
 async function init(){
   try{ensureUxStyles();applyTheme();

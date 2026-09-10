@@ -48,7 +48,9 @@ function createOrderRouter(getWhatsAppClient = () => null) {
       const name = String(body.name || '').trim(); const address = String(body.address || '').trim(); const phone = String(body.phone || '').replace(/\D/g, '');
       const language = String(body.language || 'en').trim(); const landmark = String(body.landmark || '').trim(); const restaurantNote = String(body.restaurantNote || '').trim().slice(0,300); const zoneId = String(body.deliveryZone || '').trim();
       const paymentMethod = String(body.paymentMethod || 'COD').trim().toUpperCase();
-      const location = body.location && typeof body.location === 'object' ? { latitude:Number(body.location.latitude), longitude:Number(body.location.longitude), accuracy:Number(body.location.accuracy) } : null;
+      const rawLocation = body.location && typeof body.location === 'object' ? body.location : null;
+      const lat=Number(rawLocation?.latitude), lng=Number(rawLocation?.longitude), acc=Number(rawLocation?.accuracy);
+      const location = Number.isFinite(lat)&&lat>=-90&&lat<=90&&Number.isFinite(lng)&&lng>=-180&&lng<=180 ? { latitude:lat, longitude:lng, accuracy:Number.isFinite(acc)&&acc>0?acc:null, source:['gps','map_pin'].includes(String(rawLocation?.source))?String(rawLocation.source):'gps', confirmedAt:String(rawLocation?.confirmedAt||'') || null } : null;
       const rawItems = Array.isArray(body.items) ? body.items : [];
       if (name.length < 2) return res.status(400).json({ success:false, error:'Please enter your name.' });
       if (phone.length < 10) return res.status(400).json({ success:false, error:'Please enter a valid mobile number.' });
@@ -98,17 +100,7 @@ function createOrderRouter(getWhatsAppClient = () => null) {
 
       const orderMessage = ['🔔 *NEW WEB ORDER — TOWN PIZZA PLANET*',`🆔 Order ID: ${orderId}`,`👤 Customer: ${name}`,`📱 Phone: ${phone}`,'',...normalized.map((item,i)=>`${i+1}. ${item.name} × ${item.qty} — ₹${item.price*item.qty}`),'',`🧾 *Subtotal: ₹${subtotal}*`,`🚚 Delivery: ${delivery.charge===0?'FREE':`₹${delivery.charge}`}`,`💰 *TOTAL: ₹${total}*`,'💵 Payment: Cash on Delivery',`📍 Area: ${delivery.zone.name}`,`🏠 Address: ${address}`,landmark?`📌 Landmark: ${landmark}`:null,restaurantNote?`📝 Restaurant note: ${restaurantNote}`:null,location&&Number.isFinite(location.latitude)&&Number.isFinite(location.longitude)?`🛰️ GPS: ${location.latitude}, ${location.longitude} (±${Number.isFinite(location.accuracy)?Math.round(location.accuracy):'?'}m)\n🗺️ https://maps.google.com/?q=${location.latitude},${location.longitude}`:'🛰️ GPS: Not provided',`⏱️ Estimated delivery: about ${delivery.estimatedMinutes||30} minutes`,'','📞 9448769098 / 6362648283'].filter(Boolean).join('\n');
       const client = getWhatsAppClient(); const ownerPhone = String(process.env.OWNER_PHONE || '').replace(/\D/g,'');
-      if (client && ownerPhone && global.__TPP_WHATSAPP_READY === true) {
-        for (let attempt = 1; attempt <= 3; attempt += 1) {
-          try { await client.sendMessage(`${ownerPhone}@c.us`, orderMessage); break; }
-          catch(err) {
-            if (attempt === 3) console.error('⚠️ Web order owner notification failed:', err.message);
-            else await new Promise(r=>setTimeout(r, 1200 * attempt));
-          }
-        }
-      } else if (ownerPhone) {
-        console.warn('⚠️ Order saved but WhatsApp owner notification is not ready yet.');
-      }
+      if (client && ownerPhone) { try { await client.sendMessage(`${ownerPhone}@c.us`, orderMessage); } catch(err) { console.error('⚠️ Web order owner notification failed:',err.message); } }
       return res.json({ success:true,orderId,total,subtotal,deliveryCharge:delivery.charge,deliveryZone:delivery.zone.name,estimatedMinutes:delivery.estimatedMinutes||30,order });
     } catch (err) { console.error('❌ Web order failed:',err); return res.status(500).json({ success:false,error:'Could not place the order. Please try again.' }); }
   });
