@@ -98,7 +98,17 @@ function createOrderRouter(getWhatsAppClient = () => null) {
 
       const orderMessage = ['🔔 *NEW WEB ORDER — TOWN PIZZA PLANET*',`🆔 Order ID: ${orderId}`,`👤 Customer: ${name}`,`📱 Phone: ${phone}`,'',...normalized.map((item,i)=>`${i+1}. ${item.name} × ${item.qty} — ₹${item.price*item.qty}`),'',`🧾 *Subtotal: ₹${subtotal}*`,`🚚 Delivery: ${delivery.charge===0?'FREE':`₹${delivery.charge}`}`,`💰 *TOTAL: ₹${total}*`,'💵 Payment: Cash on Delivery',`📍 Area: ${delivery.zone.name}`,`🏠 Address: ${address}`,landmark?`📌 Landmark: ${landmark}`:null,restaurantNote?`📝 Restaurant note: ${restaurantNote}`:null,location&&Number.isFinite(location.latitude)&&Number.isFinite(location.longitude)?`🛰️ GPS: ${location.latitude}, ${location.longitude} (±${Number.isFinite(location.accuracy)?Math.round(location.accuracy):'?'}m)\n🗺️ https://maps.google.com/?q=${location.latitude},${location.longitude}`:'🛰️ GPS: Not provided',`⏱️ Estimated delivery: about ${delivery.estimatedMinutes||30} minutes`,'','📞 9448769098 / 6362648283'].filter(Boolean).join('\n');
       const client = getWhatsAppClient(); const ownerPhone = String(process.env.OWNER_PHONE || '').replace(/\D/g,'');
-      if (client && ownerPhone) { try { await client.sendMessage(`${ownerPhone}@c.us`, orderMessage); } catch(err) { console.error('⚠️ Web order owner notification failed:',err.message); } }
+      if (client && ownerPhone && global.__TPP_WHATSAPP_READY === true) {
+        for (let attempt = 1; attempt <= 3; attempt += 1) {
+          try { await client.sendMessage(`${ownerPhone}@c.us`, orderMessage); break; }
+          catch(err) {
+            if (attempt === 3) console.error('⚠️ Web order owner notification failed:', err.message);
+            else await new Promise(r=>setTimeout(r, 1200 * attempt));
+          }
+        }
+      } else if (ownerPhone) {
+        console.warn('⚠️ Order saved but WhatsApp owner notification is not ready yet.');
+      }
       return res.json({ success:true,orderId,total,subtotal,deliveryCharge:delivery.charge,deliveryZone:delivery.zone.name,estimatedMinutes:delivery.estimatedMinutes||30,order });
     } catch (err) { console.error('❌ Web order failed:',err); return res.status(500).json({ success:false,error:'Could not place the order. Please try again.' }); }
   });

@@ -10,7 +10,6 @@ const {
   MessageMedia,
 } = require('whatsapp-web.js');
 
-const qrcode = require('qrcode-terminal');
 const QRCode = require('qrcode');
 
 const { MongoStore } = (() => {
@@ -228,21 +227,21 @@ async function startWhatsApp() {
     global.__TPP_WHATSAPP_READY = false;
     global.__TPP_WHATSAPP_STATUS = 'awaiting_qr';
 
+    // Keep the QR out of Render logs. Render's log viewer can mangle the
+    // terminal-art QR and make it effectively unscannable. The full-quality
+    // QR is exposed through /qr and /api/qr instead.
     QRCode.toDataURL(qr, {
-      width: 520,
-      margin: 2,
-      errorCorrectionLevel: 'M',
+      width: 720,
+      margin: 4,
+      errorCorrectionLevel: 'H',
     })
       .then((value) => {
         global.__TPP_QR_DATA_URL = value;
+        console.log('📱 WhatsApp QR ready. Open /qr on the restaurant device to scan.');
       })
-      .catch(() => {});
-
-    console.log('\n📱 New WhatsApp QR generated.\n');
-
-    qrcode.generate(qr, {
-      small: true,
-    });
+      .catch((err) => {
+        console.error('⚠️ Could not prepare WhatsApp QR for web display:', err?.message || err);
+      });
   });
 
   /* ----------------------------------------------------------

@@ -538,19 +538,41 @@ function checkout(){
 }
 
 function getGPS(){
-  const error=document.getElementById('gpsError');if(error)error.textContent='';
-  if(!('geolocation' in navigator)){if(error)error.textContent=escapeHtml(t('allowGPS'));return;}
-  const btn=document.querySelector('[data-get-gps]');if(btn){btn.disabled=true;btn.innerHTML=`📍 ${escapeHtml(t('locating'))}`;}
-  navigator.geolocation.getCurrentPosition(pos=>{
-    state.location={latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:pos.coords.accuracy,capturedAt:new Date().toISOString()};
-    const card=document.querySelector('.gps-card');card?.classList.add('captured');
+  const error=document.getElementById('gpsError');
+  if(error) error.textContent='';
+  if(!window.isSecureContext && location.hostname!=='localhost' && location.hostname!=='127.0.0.1'){
+    if(error) error.textContent='Location access requires a secure HTTPS page. You can still order using your typed address.';
+    return;
+  }
+  if(!('geolocation' in navigator)){
+    if(error) error.textContent=escapeHtml(t('allowGPS'));
+    return;
+  }
+  const btn=document.querySelector('[data-get-gps]');
+  if(btn){btn.disabled=true;btn.innerHTML=`📍 ${escapeHtml(t('locating'))}`;}
+  const finish=(loc, warning='')=>{
+    state.location=loc;
+    const card=document.querySelector('.gps-card');
+    card?.classList.add('captured');
     const copy=card?.querySelector('.gps-copy');
-    if(copy)copy.innerHTML=`<strong>${escapeHtml(t('gpsTitle'))}</strong><p>${escapeHtml(t('gpsCaptured'))} • ±${Math.round(pos.coords.accuracy||0)} m</p><small>${pos.coords.latitude.toFixed(6)}, ${pos.coords.longitude.toFixed(6)} · <a href="https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}" target="_blank" rel="noopener">${escapeHtml(t('map'))}</a></small><div id="gpsError" class="gps-error"></div>`;
+    if(copy) copy.innerHTML=`<strong>${escapeHtml(t('gpsTitle'))}</strong><p>${escapeHtml(t('gpsCaptured'))} • ±${Math.round(loc.accuracy||0)} m</p><small>${loc.latitude.toFixed(6)}, ${loc.longitude.toFixed(6)} · <a href="https://www.google.com/maps/search/?api=1&query=${loc.latitude},${loc.longitude}" target="_blank" rel="noopener">${escapeHtml(t('map'))}</a></small><div id="gpsError" class="gps-error">${warning?escapeHtml(warning):''}</div>`;
     if(btn){btn.disabled=false;btn.innerHTML=`📍 ${escapeHtml(t('gpsCaptured'))}`;}
-  },err=>{
-    if(error)error.textContent=`${escapeHtml(t('allowGPS'))} (${escapeHtml(err.message||'permission denied')})`;
-    const b=document.querySelector('[data-get-gps]');if(b){b.disabled=false;b.innerHTML=`📍 ${escapeHtml(t('useGPS'))}`;}
-  },{enableHighAccuracy:true,timeout:15000,maximumAge:30000});
+  };
+  const attempt=(cb)=>navigator.geolocation.getCurrentPosition(pos=>cb({latitude:pos.coords.latitude,longitude:pos.coords.longitude,accuracy:Number(pos.coords.accuracy||999999),capturedAt:new Date().toISOString()}),err=>cb(null,err),{enableHighAccuracy:true,timeout:25000,maximumAge:0});
+  attempt((first,err1)=>{
+    if(first){
+      // A second fresh reading is useful on phones where the first fix is a coarse Wi‑Fi/cell estimate.
+      if(first.accuracy<=120){ finish(first); return; }
+      attempt((second,err2)=>{
+        const best=second && second.accuracy<first.accuracy ? second : first;
+        const warning=best.accuracy>500 ? 'Location accuracy is low. Please verify the map pin, or type your address manually.' : '';
+        finish(best,warning);
+      });
+      return;
+    }
+    if(error) error.textContent=`${escapeHtml(t('allowGPS'))} (${escapeHtml(err1?.message||'location unavailable')})`;
+    if(btn){btn.disabled=false;btn.innerHTML=`📍 ${escapeHtml(t('useGPS'))}`;}
+  });
 }
 
 async function placeOrder(){

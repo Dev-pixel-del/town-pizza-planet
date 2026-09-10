@@ -14,7 +14,7 @@
   .status{display:inline-block;padding:8px 14px;border-radius:999px;background:#1f2937;color:#cbd5e1;font-size:14px}
   .status.ready{background:#064e3b;color:#a7f3d0}.status.wait{background:#7c2d12;color:#fed7aa}
   .hint{margin-top:18px;font-size:14px}.hint b{color:#fff}
-  a{color:#7dd3fc}
+  a{color:#7dd3fc}.qr-actions{display:flex;justify-content:center;margin:14px 0}.qr-actions button{border:1px solid #475569;background:#1e293b;color:#fff;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer}.qr-actions button:active{transform:translateY(1px)}
 </style>
 </head>
 <body>
@@ -22,7 +22,7 @@
   <h1>🍕 Town Pizza Planet</h1>
   <p>WhatsApp restaurant account setup</p>
   <div id="status" class="status">Checking status…</div>
-  <div id="qrWrap">
+  <div class="qr-actions"><button id="refresh" type="button">Refresh QR</button></div><div id="qrWrap">
     <div id="message">Waiting for a WhatsApp QR code…</div>
     <img id="qr" alt="WhatsApp linking QR code">
   </div>
@@ -59,8 +59,9 @@ async function refreshQR(){
     document.getElementById('message').textContent='Unable to read WhatsApp status. Please refresh in a few seconds.';
   }
 }
+document.getElementById('refresh')?.addEventListener('click', refreshQR);
 refreshQR();
-setInterval(refreshQR, 2000);
+setInterval(refreshQR, 1500);
 </script>
 </body>
 </html>

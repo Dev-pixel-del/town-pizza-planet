@@ -497,6 +497,7 @@ app.get('/', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html'))
 app.get('/admin', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/inventory', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/qr',(req,res)=>res.sendFile(path.join(__dirname,'public','qr.html')));
+app.get('/admin/qr',(req,res)=>res.sendFile(path.join(__dirname,'public','qr.html')));
 app.get('/api/qr',(req,res)=>{res.setHeader('Cache-Control','no-store');res.json({status:global.__TPP_WHATSAPP_STATUS||'starting',ready:global.__TPP_WHATSAPP_READY===true,qr:global.__TPP_QR_DATA_URL||null});});
 
 function setWhatsAppClient(client){ whatsappClient=client; }
