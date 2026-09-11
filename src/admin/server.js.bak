@@ -17,7 +17,7 @@ const { categories, bestsellers } = require('../data/menu');
 const { combos } = require('../data/combos');
 const { familyPacks } = require('../data/familyPacks');
 const { getCatalog } = require('../web/orderData');
-const { ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, acknowledgeOrder, alertView } = require('../ownerAlerts');
+const { ensureVapid, saveSubscription, removeSubscription, testPush, acknowledgeOrder, alertView } = require('../ownerAlerts');
 const {
   initAdminStore,
   getState,
@@ -222,9 +222,8 @@ app.get('/api/dashboard', requireAuth, async (req,res)=>{
 });
 
 app.get('/api/push/public-key', requireAuth, async (req,res)=>{try{const v=await ensureVapid();res.json({success:true,publicKey:v.vapidPublicKey})}catch(e){res.status(500).json({success:false,error:e.message||'Push unavailable'})}});
-app.post('/api/push/subscribe', requireAuth, async (req,res)=>{try{const b=req.body||{};await saveSubscription(b.subscription||b,b);res.json({success:true,devices:getSubscriptionStatus()})}catch(e){res.status(400).json({success:false,error:e.message||'Invalid subscription'})}});
-app.delete('/api/push/subscribe', requireAuth, async (req,res)=>{try{await removeSubscription(String(req.body?.endpoint||''));res.json({success:true,devices:getSubscriptionStatus()})}catch(e){res.status(400).json({success:false,error:e.message||'Could not remove subscription'})}});
-app.get('/api/push/status', requireAuth, async (req,res)=>{try{const v=await ensureVapid();res.json({success:true,devices:getSubscriptionStatus(),publicKeyReady:Boolean(v.vapidPublicKey),count:getSubscriptionStatus().length})}catch(e){res.status(500).json({success:false,error:e.message||'Push status unavailable'})}});
+app.post('/api/push/subscribe', requireAuth, async (req,res)=>{try{await saveSubscription(req.body?.subscription||req.body);res.json({success:true})}catch(e){res.status(400).json({success:false,error:e.message||'Invalid subscription'})}});
+app.delete('/api/push/subscribe', requireAuth, async (req,res)=>{try{await removeSubscription(String(req.body?.endpoint||''));res.json({success:true})}catch(e){res.status(400).json({success:false,error:e.message||'Could not remove subscription'})}});
 app.post('/api/push/test', requireAuth, async (req,res)=>{try{const sent=await testPush();res.json({success:true,sent})}catch(e){res.status(500).json({success:false,error:e.message||'Push test failed'})}});
 app.get('/api/owner-alerts/pending', requireAuth, async (req,res)=>{try{await require('../ownerAlerts').expirePendingOrders();const list=getAllOrders().filter(o=>o.status==='received').map(o=>({order:o,alert:alertView(o)})).filter(x=>x.alert.pending);res.json({success:true,alerts:list})}catch(e){res.status(500).json({success:false,error:e.message||'Could not load alerts'})}});
 app.post('/api/owner-alerts/:orderId/ack', requireAuth, async (req,res)=>{try{const result=await acknowledgeOrder(req.params.orderId);res.json({success:true,...result})}catch(e){res.status(400).json({success:false,error:e.message||'Could not acknowledge order'})}});
@@ -233,17 +232,12 @@ app.get('/api/orders', requireAuth, async (req,res)=>{const list=filteredOrders(
 app.get('/api/orders/:orderId', requireAuth, (req,res)=>{const order=getOrder(req.params.orderId);if(!order)return res.status(404).json({success:false,error:'Order not found'});res.json({success:true,order});});
 app.put('/api/orders/:orderId/status', requireAuth, async (req,res)=>{
   const valid=['received','preparing','ready','out_for_delivery','delivered','cancelled']; const status=String(req.body?.status||''); if(!valid.includes(status))return res.status(400).json({success:false,error:'Invalid status'});
-  const before=getOrderById(req.params.orderId); if(!before)return res.status(404).json({success:false,error:'Order not found'});
-  const meta=getOrderMeta(before.order_id)||{}; const alert=meta.ownerAlert||{};
-  if(status!=='received' && status!=='cancelled' && alert.state!=='acknowledged'){
-    return res.status(409).json({success:false,code:'OWNER_CONFIRMATION_REQUIRED',error:'Owner must explicitly confirm this order from the Order Alert before moving it to Preparing.'});
-  }
-  if(status===before.status) return res.json({success:true,changed:false,order:decorateOrder(before)});
   const order=await updateOrderStatus(req.params.orderId,status); if(!order)return res.status(404).json({success:false,error:'Order not found'});
-  await appendAudit('order.status_changed',{orderId:order.order_id,from:before.status,to:status});
+  if(status!=='received'){ try{await acknowledgeOrder(order.order_id);}catch{} }
+  await appendAudit('order.status_changed',{orderId:order.order_id,status});
   const tpl=getSettings().messageTemplates?.[status]; const message=tpl?renderTemplate(tpl,order):(global.__TPP_STATUS_MESSAGE?global.__TPP_STATUS_MESSAGE(status,order.order_id,order.language||'en'):null);
   if(whatsappClient && order.user_id && message) void sendStatusNotificationSafe(whatsappClient,order.user_id,message);
-  res.json({success:true,changed:true,order:decorateOrder(order)});
+  res.json({success:true,order:decorateOrder(order)});
 });
 app.put('/api/orders/:orderId/meta', requireAuth, async (req,res)=>{
   const o=getOrderById(req.params.orderId);if(!o)return res.status(404).json({success:false,error:'Order not found'});
@@ -512,7 +506,6 @@ app.post('/api/daily-summary', requireAuth, async(req,res)=>{const date=String(r
 
 app.get('/', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/admin', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
-app.get('/admin/alerts', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 app.get('/inventory', (req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
 function whatsappQrPage(req,res){
   res.setHeader('Cache-Control','no-store, no-cache, must-revalidate');

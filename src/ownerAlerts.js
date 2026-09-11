@@ -93,10 +93,8 @@ function alertView(order) {
     createdAt: a.createdAt || null,
     deadlineAt: a.deadlineAt || null,
     acknowledgedAt: a.acknowledgedAt || null,
-    confirmedAt: a.confirmedAt || a.acknowledgedAt || null,
     cancellationReason: a.cancellationReason || null,
     pending: a.state === 'pending' && order.status === 'received',
-    confirmed: a.state === 'acknowledged',
   };
 }
 
@@ -172,22 +170,27 @@ async function acknowledgeOrder(orderId) {
     await expirePendingOrders();
     return { ok:false, expired:true };
   }
-  const confirmedAt = new Date().toISOString();
-  await setAlert(orderId, { state:'acknowledged', acknowledgedAt:confirmedAt, confirmedAt });
-  await appendAudit('order.owner_alert_acknowledged', { orderId, confirmedAt }, 'admin');
-  return { ok:true, expired:false, confirmedAt };
+  await setAlert(orderId, { state:'acknowledged', acknowledgedAt:new Date().toISOString() });
+  await appendAudit('order.owner_alert_acknowledged', { orderId }, 'admin');
+  return { ok:true, expired:false };
 }
 
-async function saveSubscription(subscription) {
+async function saveSubscription(subscription, meta={}) {
   if (!subscription?.endpoint) throw new Error('Invalid push subscription.');
+  const now=new Date().toISOString();
+  const deviceId=String(meta.deviceId||'').trim().slice(0,120) || crypto.createHash('sha256').update(String(subscription.endpoint)).digest('hex').slice(0,24);
   await updateState(s => {
     const list = Array.isArray(s.pushSubscriptions) ? s.pushSubscriptions : [];
-    const clean = list.filter(x => x?.endpoint !== subscription.endpoint);
-    clean.push({ endpoint: subscription.endpoint, expirationTime: subscription.expirationTime || null, keys: { p256dh: subscription.keys?.p256dh || '', auth: subscription.keys?.auth || '' }, updatedAt:new Date().toISOString() });
-    s.pushSubscriptions = clean.slice(-10);
+    const clean = list.filter(x => x?.endpoint !== subscription.endpoint && x?.deviceId !== deviceId);
+    clean.push({ deviceId, label:String(meta.label||'This device').slice(0,80), userAgent:String(meta.userAgent||'').slice(0,300), endpoint: subscription.endpoint, expirationTime: subscription.expirationTime || null, keys: { p256dh: subscription.keys?.p256dh || '', auth: subscription.keys?.auth || '' }, addedAt: clean.find(x=>x?.deviceId===deviceId)?.addedAt || now, updatedAt:now });
+    s.pushSubscriptions = clean.slice(-20);
     return s;
   });
   return true;
+}
+function getSubscriptionStatus(){
+  const list=Array.isArray(getState().pushSubscriptions)?getState().pushSubscriptions:[];
+  return list.map(x=>({deviceId:x.deviceId||null,label:x.label||'This device',userAgent:x.userAgent||'',addedAt:x.addedAt||x.updatedAt||null,updatedAt:x.updatedAt||null,endpoint:x.endpoint||''}));
 }
 async function removeSubscription(endpoint) {
   await updateState(s=>{s.pushSubscriptions=(s.pushSubscriptions||[]).filter(x=>x.endpoint!==endpoint);return s;});
@@ -205,4 +208,4 @@ async function initOwnerAlerts() {
   console.log('🔔 Owner order-alert engine ready (2-minute acknowledgement window).');
 }
 
-module.exports = { initOwnerAlerts, ensureVapid, saveSubscription, removeSubscription, testPush, createOrderAlert, acknowledgeOrder, expirePendingOrders, alertView };
+module.exports = { initOwnerAlerts, ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, createOrderAlert, acknowledgeOrder, expirePendingOrders, alertView };

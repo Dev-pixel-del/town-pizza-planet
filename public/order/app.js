@@ -575,7 +575,7 @@ async function placeOrder(){
     state.lastOrder.order_id=data.orderId;state.lastOrder.phone=phone;state.lastOrder.estimated_minutes=etaMinutes;
     saveJson('tpp_last_order',state.lastOrder);
     sessionStorage.removeItem('tpp_checkout_draft');
-    state.cart=[];saveCart();requestNotificationPermission();
+    state.cart=[];saveCart();
     // Every successful web order ends on a fresh page load. The order/phone query lets init()
     // rebuild the tracking page from the server instead of showing stale client state.
     const freshUrl=`/order?phone=${encodeURIComponent(phone)}&order=${encodeURIComponent(data.orderId)}&refresh=${Date.now()}`;
@@ -610,45 +610,29 @@ function setupVoiceConfirmation(order){
   const btn=document.getElementById('tppVoiceConfirmationBtn');
   const status=document.getElementById('tppVoiceConfirmationStatus');
   if(!audio||!btn)return;
-  const confirmed=order?.confirmation?.confirmed===true || order?.confirmation?.state==='acknowledged';
-  const markerKey=`tpp_confirmation_announced_${order?.order_id||''}`;
-  btn.disabled=!confirmed;
+  const confirmed=order?.confirmation?.state==='acknowledged';
+  const setStatus=(key)=>{if(status)status.textContent=t(key);};
   if(!confirmed){
+    btn.disabled=true;
     if(status)status.textContent='Waiting for restaurant confirmation.';
     return;
   }
-  const setStatus=(key)=>{if(status)status.textContent=t(key);};
-  btn.onclick=async()=>{
-    try{
-      audio.currentTime=0;
-      setStatus('voiceConfirmationPlaying');
-      btn.disabled=true;
-      await audio.play();
-    }catch(err){
-      btn.disabled=false;
-      if(status)status.textContent='Tap the button to hear the confirmation.';
-    }
-  };
-  audio.addEventListener('play',()=>{btn.disabled=true;setStatus('voiceConfirmationPlaying');},{once:false});
-  audio.addEventListener('ended',()=>{btn.disabled=false;setStatus('voiceConfirmationReady');},{once:false});
-  audio.addEventListener('error',()=>{btn.disabled=false;if(status)status.textContent='Voice confirmation is unavailable right now.';},{once:false});
-  // Auto-play only once, immediately after the restaurant owner confirms.
-  // Browsers may block autoplay; the visible button remains the fallback.
-  if(!loadJson(markerKey,false)){
-    saveJson(markerKey,true);
-    setTimeout(async()=>{
-      try{setStatus('voiceConfirmationPlaying');await audio.play();}
-      catch{if(status)status.textContent=t('voiceConfirmationReady');}
-    },350);
+  btn.disabled=false;
+  btn.onclick=async()=>{try{audio.currentTime=0;setStatus('voiceConfirmationPlaying');btn.disabled=true;await audio.play();}catch{btn.disabled=false;if(status)status.textContent='Tap the button to hear the confirmation.';}};
+  audio.onplay=()=>{btn.disabled=true;setStatus('voiceConfirmationPlaying');};
+  audio.onended=()=>{btn.disabled=false;setStatus('voiceConfirmationReady');};
+  audio.onerror=()=>{btn.disabled=false;if(status)status.textContent='Voice confirmation is unavailable right now.';};
+  if(!sessionStorage.getItem(`tpp_voice_played_${order.order_id}`)){
+    setTimeout(async()=>{try{setStatus('voiceConfirmationPlaying');await audio.play();sessionStorage.setItem(`tpp_voice_played_${order.order_id}`,'1');}catch{if(status)status.textContent=t('voiceConfirmationReady');}},350);
   }
 }
 
 function trackingPage(){
   const o=state.lastOrder;if(!o?.order_id)return home();
   const minutes=Number(o.estimated_minutes||30); const eta=new Date(new Date(o.created_at||Date.now()).getTime()+minutes*60000);
-  const status=o.status||'received'; const cancelled=status==='cancelled'; const confirmed=o.confirmation?.confirmed===true || o.confirmation?.state==='acknowledged'; const waiting=!cancelled&&!confirmed; const steps=[['received',t('receivedStatus'),'✓'],['preparing',t('preparing'),'🔥'],['ready',t('ready'),'🍕'],['out_for_delivery',t('outForDelivery'),'🛵'],['delivered',t('delivered'),'✓']]; const idx=Math.max(0,steps.findIndex(s=>s[0]===status));
+  const status=o.status||'received'; const cancelled=status==='cancelled'; const ownerConfirmed=o.confirmation?.state==='acknowledged'; const steps=[['received',t('receivedStatus'),'✓'],['preparing',t('preparing'),'🔥'],['ready',t('ready'),'🍕'],['out_for_delivery',t('outForDelivery'),'🛵'],['delivered',t('delivered'),'✓']]; const idx=Math.max(0,steps.findIndex(s=>s[0]===status));
   clearInterval(state.etaTimer);
-  render(`<section class="success"><div class="success-card glow-card tracking-card"><div class="order-seal" aria-label="Town Pizza Planet sealed logo"><div class="order-seal-ring"></div><div class="order-seal-glow"></div><div class="order-seal-plate"><img src="/order/logo.jpg" alt="Town Pizza Planet logo"></div><span>SEALED</span></div><div class="success-icon">${cancelled?'✕':'✓'}</div><p class="eyebrow">${escapeHtml(cancelled?'ORDER CANCELLED':confirmed?t('orderConfirmed'):'ORDER RECEIVED')}</p><h1>${escapeHtml(cancelled?'We could not confirm your order':confirmed?t('wereOnIt'):'We have your order')}${cancelled?'':' 🍕'}</h1><p class="success-copy">${escapeHtml(o.status==='cancelled' && o.confirmation?.cancellationReason ? o.confirmation.cancellationReason : t('received'))}</p>${waiting && o.confirmation?.deadlineAt ? `<div class="confirmation-wait-card"><div class="confirm-pulse">🚨</div><div><strong>Waiting for restaurant confirmation</strong><p>Your order must be acknowledged within <span id="confirmCountdown">2:00</span>.</p></div></div>`:''}${o.status==='cancelled' && o.confirmation?.cancellationReason ? `<div class="confirmation-cancel-card">❌ <strong>Your order was cancelled automatically.</strong><p>Please place a new order when you are ready.</p></div>`:''}<div class="voice-confirmation-card" role="region" aria-label="${escapeHtml(t('voiceConfirmationReady'))}"><audio id="tppVoiceConfirmation" preload="auto" playsinline src="${escapeHtml(getVoiceConfirmationConfig(o).src)}"></audio><div><p class="eyebrow">${escapeHtml(t('voiceConfirmationReady'))}</p><p id="tppVoiceConfirmationStatus" class="muted">${escapeHtml(confirmed?t('voiceConfirmationReady'):'Waiting for restaurant confirmation.')}</p></div><button id="tppVoiceConfirmationBtn" class="primary-btn" type="button" ${confirmed?'':'disabled'}>${escapeHtml(t('playVoiceConfirmation'))}</button></div><div class="order-id">${escapeHtml(o.order_id)}</div><div class="eta-card"><div class="eta-ring"><strong id="etaTime">--:--</strong><small>min : sec</small></div><div><p class="eyebrow">${escapeHtml(t('arriving'))}</p><strong>${escapeHtml(t('about'))} ${minutes} ${escapeHtml(t('minutes'))}</strong><span>${escapeHtml(t('estimated'))} ${escapeHtml(`${minutes} ${t('minutes')}`)}</span></div></div><div class="timeline">${steps.map((s,i)=>`<div class="timeline-step ${i<=idx?'done':''} ${s[0]===status?'current':''}"><span>${s[2]}</span><div><strong>${escapeHtml(s[1])}</strong>${i===idx?`<small>${escapeHtml(t('orderStatus'))}</small>`:''}</div></div>`).join('')}</div><div class="tracking-meta"><span>💵 ${escapeHtml(t('cashTotal'))}</span><strong>${money(o.total)}</strong></div>${o.admin?.driver?`<div class="driver-tracking-card"><div><p class="eyebrow">DELIVERY DRIVER</p><strong>🛵 ${escapeHtml(o.admin.driver)}</strong><span>${escapeHtml(o.admin.driverPhone||'')}</span></div><a class="contact-btn" href="tel:${escapeHtml(o.admin.driverPhone||'')}">📞 Call Driver</a></div>`:''}<div class="tracking-actions"><button class="primary-btn" data-share-order>${escapeHtml(t('share'))}</button><button class="ghost-btn boxed" data-receipt>${escapeHtml(t('downloadReceipt'))}</button><button class="ghost-btn boxed" data-print-receipt>${escapeHtml(t('printReceipt'))}</button></div><div class="contact-panel"><p class="eyebrow">${escapeHtml(t('contactRestaurant'))}</p><div class="contact-actions"><a class="contact-btn" href="tel:9448769098">📞 9448769098</a><a class="contact-btn" href="tel:6362648283">📞 6362648283</a></div></div><section class="feedback-card">
+  render(`<section class="success"><div class="success-card glow-card tracking-card"><div class="order-seal" aria-label="Town Pizza Planet sealed logo"><div class="order-seal-ring"></div><div class="order-seal-glow"></div><div class="order-seal-plate"><img src="/order/logo.jpg" alt="Town Pizza Planet logo"></div><span>SEALED</span></div><div class="success-icon">${cancelled?'✕':'✓'}</div><p class="eyebrow">${escapeHtml(cancelled?'ORDER CANCELLED':(ownerConfirmed?t('orderConfirmed'):t('receivedStatus')))}</p><h1>${escapeHtml(cancelled?'We could not confirm your order':(ownerConfirmed?t('wereOnIt'):'Waiting for the restaurant'))}${cancelled?'':' 🍕'}</h1><p class="success-copy">${escapeHtml(o.status==='cancelled' && o.confirmation?.cancellationReason ? o.confirmation.cancellationReason : t('received'))}</p>${o.status==='received' && o.confirmation?.pending ? `<div class="confirmation-wait-card"><div class="confirm-pulse">🚨</div><div><strong>Waiting for restaurant confirmation</strong><p>Your order must be acknowledged within <span id="confirmCountdown">2:00</span>.</p></div></div>`:''}${o.status==='cancelled' && o.confirmation?.cancellationReason ? `<div class="confirmation-cancel-card">❌ <strong>Your order was cancelled automatically.</strong><p>Please place a new order when you are ready.</p></div>`:''}<div class="voice-confirmation-card" role="region" aria-label="${escapeHtml(t('voiceConfirmationReady'))}"><audio id="tppVoiceConfirmation" preload="auto" playsinline src="${escapeHtml(getVoiceConfirmationConfig(o).src)}"></audio><div><p class="eyebrow">${escapeHtml(t('voiceConfirmationReady'))}</p><p id="tppVoiceConfirmationStatus" class="muted">${escapeHtml(ownerConfirmed?t('voiceConfirmationReady'):'Waiting for restaurant confirmation.')}</p></div><button id="tppVoiceConfirmationBtn" class="primary-btn" type="button" ${ownerConfirmed?'':'disabled'}>${escapeHtml(t('playVoiceConfirmation'))}</button></div><div class="order-id">${escapeHtml(o.order_id)}</div><div class="eta-card"><div class="eta-ring"><strong id="etaTime">--:--</strong><small>min : sec</small></div><div><p class="eyebrow">${escapeHtml(t('arriving'))}</p><strong>${escapeHtml(t('about'))} ${minutes} ${escapeHtml(t('minutes'))}</strong><span>${escapeHtml(t('estimated'))} ${escapeHtml(`${minutes} ${t('minutes')}`)}</span></div></div><div class="timeline">${steps.map((s,i)=>`<div class="timeline-step ${i<=idx?'done':''} ${s[0]===status?'current':''}"><span>${s[2]}</span><div><strong>${escapeHtml(s[1])}</strong>${i===idx?`<small>${escapeHtml(t('orderStatus'))}</small>`:''}</div></div>`).join('')}</div><div class="tracking-meta"><span>💵 ${escapeHtml(t('cashTotal'))}</span><strong>${money(o.total)}</strong></div>${o.admin?.driver?`<div class="driver-tracking-card"><div><p class="eyebrow">DELIVERY DRIVER</p><strong>🛵 ${escapeHtml(o.admin.driver)}</strong><span>${escapeHtml(o.admin.driverPhone||'')}</span></div><a class="contact-btn" href="tel:${escapeHtml(o.admin.driverPhone||'')}">📞 Call Driver</a></div>`:''}<div class="tracking-actions"><button class="primary-btn" data-share-order>${escapeHtml(t('share'))}</button><button class="ghost-btn boxed" data-receipt>${escapeHtml(t('downloadReceipt'))}</button><button class="ghost-btn boxed" data-print-receipt>${escapeHtml(t('printReceipt'))}</button></div><div class="contact-panel"><p class="eyebrow">${escapeHtml(t('contactRestaurant'))}</p><div class="contact-actions"><a class="contact-btn" href="tel:9448769098">📞 9448769098</a><a class="contact-btn" href="tel:6362648283">📞 6362648283</a></div></div><section class="feedback-card">
   <p class="eyebrow">${escapeHtml(t('feedbackTitle'))}</p>
   <p class="muted feedback-subtitle">${escapeHtml(t('feedbackSubtitle'))}</p>
   <div class="star-rating" role="radiogroup" aria-label="5 star rating">
@@ -708,53 +692,28 @@ function initFeedbackControls(orderId){
   });
 }
 
-function startStatusPolling(orderId){
-  clearInterval(state.statusTimer);
-  if(!state.phone)return;
-  const poll=async()=>{
-    try{
-      const r=await fetch(`/api/order/status/${encodeURIComponent(orderId)}?phone=${encodeURIComponent(state.phone)}`,{cache:'no-store'});
-      const d=await r.json();
-      if(d.success&&d.order){
-        const oldStatus=state.lastOrder?.status;
-        const oldConfirmationState=state.lastOrder?.confirmation?.state||null;
-        const oldConfirmed=state.lastOrder?.confirmation?.confirmed===true || oldConfirmationState==='acknowledged';
-        const oldDriver=state.lastOrder?.admin?.driver||'';
-        state.lastOrder=d.order;saveJson('tpp_last_order',state.lastOrder);
-        const newConfirmed=d.order?.confirmation?.confirmed===true || d.order?.confirmation?.state==='acknowledged';
-        const newDriver=d.order?.admin?.driver||'';
-        if(!oldConfirmed && newConfirmed){
-          notifyConfirmation(orderId);
-          if(state.view==='tracking')trackingPage();
-        }else if(oldDriver!==newDriver){
-          if(state.view==='tracking')trackingPage();
-        }else if(!oldStatus || oldStatus!==d.order.status){
-          // Status changes refresh the UI only. They do not announce confirmation.
-          if(state.view==='tracking')trackingPage();
-        }
-        if(d.order.status==='delivered'||d.order.status==='cancelled'){clearInterval(state.statusTimer);}
-      }
-    }catch{}
-  };
-  poll();
-  const confirmedNow=state.lastOrder?.confirmation?.confirmed===true || state.lastOrder?.confirmation?.state==='acknowledged';
-  const interval=(!confirmedNow && state.lastOrder?.status==='received')?2000:15000;
-  state.statusTimer=setInterval(poll,interval);
-}
-function notifyConfirmation(orderId){
-  try{
-    if(!('Notification' in window)||Notification.permission!=='granted')return;
-    new Notification(`Town Pizza Planet • ${orderId}`,{body:'✅ Your order has been confirmed by the restaurant.'});
-  }catch{}
-}
+function startStatusPolling(orderId){clearInterval(state.statusTimer);if(!state.phone)return;const poll=async()=>{try{const r=await fetch(`/api/order/status/${encodeURIComponent(orderId)}?phone=${encodeURIComponent(state.phone)}`,{cache:'no-store'});const d=await r.json();if(d.success&&d.order){const previous=state.lastOrder||{};const oldConfirmed=previous.confirmation?.state==='acknowledged';const newConfirmed=d.order.confirmation?.state==='acknowledged';const oldStatus=previous.status;const oldDriver=previous.admin?.driver||'';state.lastOrder=d.order;saveJson('tpp_last_order',state.lastOrder);const newDriver=d.order?.admin?.driver||'';if(!oldConfirmed&&newConfirmed){notifyOrderConfirmed(d.order);}else if((oldStatus!==undefined&&oldStatus!==d.order.status)||(oldDriver!==newDriver)){if(state.view==='tracking')trackingPage();}if(d.order.status==='delivered'||d.order.status==='cancelled'){clearInterval(state.statusTimer);}}}catch{}};poll();const interval=state.lastOrder?.confirmation?.state==='acknowledged'?15000:2000;state.statusTimer=setInterval(poll,interval);}
 function statusLabel(status){return({received:t('receivedStatus'),preparing:t('preparing'),ready:t('ready'),out_for_delivery:t('outForDelivery'),delivered:t('delivered'),cancelled:t('cancelled')}[status]||status);}
+async function loadOrderHistory(){
+  const phone=normalizePhone(state.phone||'');
+  if(!phone)return [];
+  try{const r=await fetch(`/api/order/history?phone=${encodeURIComponent(phone)}`,{cache:'no-store'});const d=await r.json();if(!r.ok||!d.success)return [];return Array.isArray(d.orders)?d.orders:[];}catch{return [];}
+}
 function orderHistoryCard(o){return `<article class="history-card"><div><span>${escapeHtml(o.order_id)}</span><strong>${money(o.total)}</strong></div><p>${escapeHtml(new Date(o.created_at).toLocaleDateString('en-IN'))} • ${escapeHtml(statusLabel(o.status))}</p><button class="primary-btn wide" data-reorder="${o.order_id}">${escapeHtml(t('reorder'))}</button></article>`;}
 async function reorder(orderId){const o=historyCache.find(x=>x.order_id===orderId);if(!o)return;state.cart=[];for(const x of o.items||[]){if(x.isCombo)addPack(x.id,Number(x.qty)||1);else addItem(x.id,Boolean(x.extraCheese),Number(x.qty)||1,x.variantKey||null);}saveCart();openCart();}
 function favoritesSection(){const items=getAllProducts().filter(x=>state.favorites.has(x.id)&&isVegVisible(x)).slice(0,4);return items.length?`<section class="mini-section"><div class="section-head"><div><p class="eyebrow">♥</p><h2>${escapeHtml(t('favorites'))}</h2></div></div><div class="product-grid compact">${items.map(productCard).join('')}</div></section>`:'';}
 function recentViewedSection(){const items=recentItemIds().map(itemById).filter(Boolean).slice(0,4);return items.length?`<section class="mini-section"><div class="section-head"><div><p class="eyebrow">↶</p><h2>${escapeHtml(t('recentlyViewed'))}</h2></div></div><div class="product-grid compact">${items.map(productCard).join('')}</div></section>`:'';}
 function toggleFavorite(id){if(state.favorites.has(id))state.favorites.delete(id);else state.favorites.add(id);saveFavorites();if(state.view==='menu')menu();else if(state.view==='bestsellers')bestsellers();else home();}
 async function requestNotificationPermission(){try{if('Notification' in window&&Notification.permission==='default')await Notification.requestPermission();}catch{}}
-function notifyStatus(){/* Routine status updates are intentionally silent. */}
+function notifyOrderConfirmed(order){
+  try{
+    const key=`tpp_confirmation_announced_${order.order_id}`;
+    if(localStorage.getItem(key)==='1')return;
+    localStorage.setItem(key,'1');
+    if('Notification' in window && Notification.permission==='granted') new Notification(`Town Pizza Planet • ${order.order_id}`,{body:'✅ Your order has been confirmed by the restaurant.'});
+    if(state.view==='tracking'){trackingPage();setTimeout(()=>{const audio=document.getElementById('tppVoiceConfirmation');if(audio){audio.currentTime=0;audio.play().catch(()=>{});sessionStorage.setItem(`tpp_voice_played_${order.order_id}`,'1');}},450);}
+  }catch{}
+}
 function shareOrder(){const o=state.lastOrder;if(!o)return;const shareUrl=`${location.origin}${location.pathname}?order=${encodeURIComponent(o.order_id)}&phone=${encodeURIComponent(state.phone)}`;const text=`Town Pizza Planet\nOrder ${o.order_id}\nTotal ${money(o.total)}\nStatus ${statusLabel(o.status||'received')}\n${shareUrl}`;if(navigator.share)navigator.share({title:'Town Pizza Planet Order',text}).catch(()=>{});else navigator.clipboard?.writeText(text).then(()=>alert('Order details copied.')).catch(()=>{});}
 function receiptHtml(o){const rows=(o.items||[]).map(x=>`<tr><td>${escapeHtml(x.name||x.id)}</td><td>${x.qty}</td><td>${money((x.price||0)*x.qty)}</td></tr>`).join('');return `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(t('receiptTitle'))}</title><style>body{font-family:Arial,sans-serif;padding:30px;color:#222}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{padding:9px;border-bottom:1px solid #ddd;text-align:left}.total{font-size:20px;font-weight:700;margin-top:18px}.muted{color:#666}</style></head><body><h1>🍕 Town Pizza Planet</h1><div class="muted">${escapeHtml(t('receiptTitle'))}</div><p><strong>Order:</strong> ${escapeHtml(o.order_id)}<br><strong>Name:</strong> ${escapeHtml(o.user_name||'Customer')}<br><strong>Mobile:</strong> ${escapeHtml(o.phone||o.user_id||'').replace(/@web/g,'')}<br><strong>Area:</strong> ${escapeHtml(o.delivery_zone||'')}<br><strong>Address:</strong> ${escapeHtml(o.address||'')}</p><table><thead><tr><th>Item</th><th>Qty</th><th>Amount</th></tr></thead><tbody>${rows}</tbody></table><p>Subtotal: ${money(o.subtotal)}<br>Delivery: ${o.delivery_charge?money(o.delivery_charge):'FREE'}</p><div class="total">Total: ${money(o.total)}</div><p>Payment: Cash on Delivery</p><p class="muted">${escapeHtml(t('estimated'))}: ${Number(o.estimated_minutes||30)} ${escapeHtml(t('minutes'))}</p></body></html>`;}
 function downloadReceipt(){if(!state.lastOrder)return;const blob=new Blob([receiptHtml(state.lastOrder)],{type:'text/html'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`${state.lastOrder.order_id}.html`;a.click();setTimeout(()=>URL.revokeObjectURL(url),500);}
