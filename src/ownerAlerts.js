@@ -5,7 +5,7 @@ const {
 } = require('./admin/adminStore');
 const { getAllOrders, getOrderById, updateOrderStatus } = require('./db/database');
 
-const ALERT_WINDOW_MS = 2 * 60 * 1000;
+const ALERT_WINDOW_MS = 3 * 60 * 1000;
 const REPEAT_MS = 20 * 1000;
 const WATCH_MS = 3000;
 let webPushModule = null;
@@ -152,7 +152,7 @@ async function expirePendingOrders() {
       const fresh = getOrderById(order.order_id);
       if (!fresh || fresh.status !== 'received') continue;
       await updateOrderStatus(order.order_id, 'cancelled');
-      await setAlert(order.order_id, { state:'expired', cancellationReason:'Restaurant did not acknowledge the order within 2 minutes.', expiredAt:new Date().toISOString() });
+      await setAlert(order.order_id, { state:'expired', cancellationReason:'Restaurant did not acknowledge the order within 3 minutes.', expiredAt:new Date().toISOString() });
       await appendAudit('order.auto_cancelled_unacknowledged', { orderId: order.order_id, deadlineAt: a.deadlineAt }, 'system');
     } catch (err) { await appendError(err?.message || String(err), { task:'owner-alert-expiry', orderId:order.order_id }); }
   }
@@ -173,6 +173,29 @@ async function acknowledgeOrder(orderId) {
   await setAlert(orderId, { state:'acknowledged', acknowledgedAt:new Date().toISOString() });
   await appendAudit('order.owner_alert_acknowledged', { orderId }, 'admin');
   return { ok:true, expired:false };
+}
+
+async function rejectOrder(orderId, reason='Rejected by restaurant') {
+  const order = getOrderById(orderId);
+  if (!order) throw new Error('Order not found');
+  const meta = getOrderMeta(orderId) || {};
+  const a = meta.ownerAlert || {};
+  if (order.status === 'cancelled' || a.state === 'rejected' || a.state === 'expired') return { ok:true, already:true, rejected:true };
+  if (a.state !== 'pending') return { ok:false, error:'Order is no longer awaiting confirmation.' };
+  const deadline = new Date(a.deadlineAt || 0).getTime();
+  if (Number.isFinite(deadline) && Date.now() >= deadline) {
+    await expirePendingOrders();
+    return { ok:false, expired:true };
+  }
+  await updateOrderStatus(orderId, 'cancelled');
+  await setAlert(orderId, {
+    state:'rejected',
+    acknowledgedAt:null,
+    cancellationReason:String(reason||'Rejected by restaurant').slice(0,200),
+    rejectedAt:new Date().toISOString(),
+  });
+  await appendAudit('order.owner_alert_rejected', { orderId, reason:String(reason||'Rejected by restaurant').slice(0,200) }, 'admin');
+  return { ok:true, rejected:true };
 }
 
 async function saveSubscription(subscription, meta={}) {
@@ -205,7 +228,7 @@ async function initOwnerAlerts() {
   await ensureVapid();
   setInterval(() => expirePendingOrders().catch(e=>console.error('owner alert expiry:',e)), WATCH_MS);
   setInterval(() => repeatPendingAlerts().catch(e=>console.error('owner alert repeat:',e)), REPEAT_MS);
-  console.log('🔔 Owner order-alert engine ready (2-minute acknowledgement window).');
+  console.log('🔔 Owner order-alert engine ready (3-minute acknowledgement window).');
 }
 
-module.exports = { initOwnerAlerts, ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, createOrderAlert, acknowledgeOrder, expirePendingOrders, alertView };
+module.exports = { initOwnerAlerts, ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, createOrderAlert, acknowledgeOrder, rejectOrder, expirePendingOrders, alertView };

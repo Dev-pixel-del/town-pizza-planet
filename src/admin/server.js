@@ -17,7 +17,7 @@ const { categories, bestsellers } = require('../data/menu');
 const { combos } = require('../data/combos');
 const { familyPacks } = require('../data/familyPacks');
 const { getCatalog } = require('../web/orderData');
-const { ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, acknowledgeOrder, alertView } = require('../ownerAlerts');
+const { ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, acknowledgeOrder, rejectOrder, alertView } = require('../ownerAlerts');
 const {
   initAdminStore,
   getState,
@@ -228,6 +228,7 @@ app.get('/api/push/status', requireAuth, async (req,res)=>{try{const v=await ens
 app.post('/api/push/test', requireAuth, async (req,res)=>{try{const sent=await testPush();res.json({success:true,sent})}catch(e){res.status(500).json({success:false,error:e.message||'Push test failed'})}});
 app.get('/api/owner-alerts/pending', requireAuth, async (req,res)=>{try{await require('../ownerAlerts').expirePendingOrders();const list=getAllOrders().filter(o=>o.status==='received').map(o=>({order:o,alert:alertView(o)})).filter(x=>x.alert.pending);res.json({success:true,alerts:list})}catch(e){res.status(500).json({success:false,error:e.message||'Could not load alerts'})}});
 app.post('/api/owner-alerts/:orderId/ack', requireAuth, async (req,res)=>{try{const result=await acknowledgeOrder(req.params.orderId);res.json({success:true,...result})}catch(e){res.status(400).json({success:false,error:e.message||'Could not acknowledge order'})}});
+app.post('/api/owner-alerts/:orderId/reject', requireAuth, async (req,res)=>{try{const result=await rejectOrder(req.params.orderId, req.body?.reason || 'Rejected by restaurant');res.json({success:true,...result})}catch(e){res.status(400).json({success:false,error:e.message||'Could not reject order'})}});
 app.get('/api/orders/today', requireAuth, (req,res)=>res.json({success:true,orders:getTodayOrders().map(decorateOrder)}));
 app.get('/api/orders', requireAuth, async (req,res)=>{const list=filteredOrders(req.query);for(const o of list) await ensureDriverAssignment(o);res.json({success:true,orders:list.map(o=>decorateOrder(o))});});
 app.get('/api/orders/:orderId', requireAuth, (req,res)=>{const order=getOrder(req.params.orderId);if(!order)return res.status(404).json({success:false,error:'Order not found'});res.json({success:true,order});});
