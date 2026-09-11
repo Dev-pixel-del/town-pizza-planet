@@ -17,6 +17,7 @@ let reconnectTimer = null;
 let reconnecting = false;
 let manualStop = false;
 let reconnectAttempts = 0;
+let autoAuthResetInProgress = false;
 
 const STORE_NAME = process.env.STORE_NAME || 'Town Pizza Planet';
 const OWNER_PHONE = String(process.env.OWNER_PHONE || '').replace(/\D/g, '');
@@ -278,6 +279,7 @@ async function connectWhatsApp() {
   global.__TPP_WHATSAPP_STATUS = 'starting';
 
   const { state, saveCreds } = await openMongoAuth();
+  let sawQr = false;
 
   const logger = P({ level: 'silent' });
   const socket = makeWASocket({
@@ -300,6 +302,7 @@ async function connectWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      sawQr = true;
       global.__TPP_WHATSAPP_READY = false;
       global.__TPP_WHATSAPP_STATUS = 'awaiting_qr';
       whatsappState.ready = false;
@@ -350,11 +353,29 @@ async function connectWhatsApp() {
 
       if (manualStop) return;
 
-      // QR is required again after an explicit logout or invalid auth state.
-      // The safe reset action in admin/server.js clears auth and calls start again.
+      // If a previously registered persisted session is rejected with 401
+      // before Baileys ever emits a QR, the stored auth is stale/revoked.
+      // Automatically clear ONLY the WhatsApp auth collection and start a
+      // brand-new QR session.  Do not auto-reset after a QR has already been
+      // shown, because that would loop on a failed pairing attempt.
       if (loggedOut || badSession) {
         global.__TPP_WHATSAPP_STATUS = loggedOut ? 'logged_out' : 'bad_session';
         whatsappState.status = global.__TPP_WHATSAPP_STATUS;
+        if (!autoAuthResetInProgress && state.creds?.registered === true && !sawQr) {
+          autoAuthResetInProgress = true;
+          console.warn('🧹 Persisted WhatsApp session was rejected before QR generation. Clearing only WhatsApp auth and creating a fresh QR.');
+          try {
+            await resetWhatsAppAuth();
+          } catch (resetErr) {
+            global.__TPP_WHATSAPP_STATUS = 'auth_reset_failed';
+            whatsappState.status = 'auth_reset_failed';
+            console.error('❌ Automatic WhatsApp auth reset failed:', resetErr?.message || resetErr);
+          } finally {
+            autoAuthResetInProgress = false;
+          }
+        } else if (loggedOut) {
+          console.error('🔒 WhatsApp login was rejected after QR/pairing. A new scan is required.');
+        }
         return;
       }
 
