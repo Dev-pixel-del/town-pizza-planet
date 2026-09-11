@@ -123,8 +123,7 @@ function createOrderRouter(getWhatsAppClient = () => null) {
                 throw new Error('WhatsApp client is not ready.');
               }
 
-              const raw = await client.getNumberId(ownerPhone);
-              const target = raw?._serialized || `${ownerPhone}@c.us`;
+              const target = `${ownerPhone}@s.whatsapp.net`;
               await client.sendMessage(target, orderMessage);
               console.log(`✅ Owner WhatsApp notification sent for order ${orderId}.`);
               return;

@@ -1,599 +1,240 @@
 require('dotenv').config();
-const path = require('path');
-const fs = require('fs');
-
-const puppeteer = require('puppeteer');
-const {
-  Client,
-  LocalAuth,
-  RemoteAuth,
-  MessageMedia,
-} = require('whatsapp-web.js');
 
 const QRCode = require('qrcode');
-
-const { MongoStore } = (() => {
-  try {
-    return require('wwebjs-mongo');
-  } catch {
-    return { MongoStore: null };
-  }
-})();
-
-const { handleMessage } = require('./handlers/conversationHandler');
-const { getMongoose } = require('./db/database');
+const P = require('pino');
+const { MongoClient } = require('mongodb');
 const { setWhatsAppClient } = require('./admin/server');
-const ui = require('./ui/whatsappUI');
 
-const OWNER_PHONE = process.env.OWNER_PHONE || '';
-const STORE_NAME = process.env.STORE_NAME || 'Town Pizza Planet';
+let makeWASocket;
+let DisconnectReason;
+let Browsers;
+let useMongoDBAuthState;
 
-const USE_LOCAL_AUTH =
-  String(process.env.LOCAL_AUTH || '').toLowerCase() === 'true';
-
-const RESTRICT_HOURS =
-  String(process.env.RESTRICT_HOURS || '').toLowerCase() === 'true';
-
-const OPEN_HOUR = Number(process.env.OPEN_HOUR || 10);
-const CLOSE_HOUR = Number(process.env.CLOSE_HOUR || 23);
-
-let client = null;
+let sock = null;
+let adapter = null;
+let mongo = null;
 let reconnectTimer = null;
 let reconnecting = false;
+let manualStop = false;
 let reconnectAttempts = 0;
 
-async function waitForWhatsAppReady(timeoutMs = 15000) {
-  const start = Date.now();
-  while (client && !global.__TPP_WHATSAPP_READY && Date.now() - start < timeoutMs) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  return Boolean(client && global.__TPP_WHATSAPP_READY);
+const STORE_NAME = process.env.STORE_NAME || 'Town Pizza Planet';
+const OWNER_PHONE = String(process.env.OWNER_PHONE || '').replace(/\D/g, '');
+const ORDER_URL = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet-1.onrender.com').replace(/\/$/, '');
+const MONGODB_URI = process.env.MONGODB_URI || '';
+
+function normalizeJid(jid) {
+  const raw = String(jid || '').trim();
+  if (!raw) return raw;
+  if (raw.endsWith('@c.us')) return raw.replace(/@c\.us$/, '@s.whatsapp.net');
+  if (raw.endsWith('@lid')) return raw;
+  if (raw.includes('@')) return raw;
+  const digits = raw.replace(/\D/g, '');
+  return digits ? `${digits}@s.whatsapp.net` : raw;
 }
 
-async function sendWhatsAppActionSafe(action, attempts = 3) {
-  if (!client) throw new Error('WhatsApp client is not initialized.');
-  const ready = await waitForWhatsAppReady(15000);
-  if (!ready) throw new Error('WhatsApp client is not ready.');
-  let lastError;
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    try {
-      return await action();
-    } catch (err) {
-      lastError = err;
-      const message = String(err?.message || err);
-      const transient = /Execution context was destroyed|Target closed|Session closed|detached|not connected|Protocol error/i.test(message);
-      if (!transient || attempt === attempts) break;
-      await new Promise(resolve => setTimeout(resolve, 1200 * attempt));
-    }
-  }
-  throw lastError || new Error('WhatsApp send failed.');
-}
-
-async function sendWhatsAppMessageSafe(chatId, text, attempts = 3) {
-  return sendWhatsAppActionSafe(() => client.sendMessage(chatId, text), attempts);
-}
-
-global.__TPP_WHATSAPP_READY = false;
-global.__TPP_WHATSAPP_STATUS = 'starting';
-global.__TPP_QR_DATA_URL = null;
-
-/* ============================================================
-   AUTH STRATEGY
-   ============================================================ */
-
-function buildAuthStrategy() {
-  if (USE_LOCAL_AUTH) {
-    const dataPath = path.resolve(process.cwd(), '.wwebjs_auth');
-
-    console.log(
-      `🔐 Using LocalAuth for local testing: ${dataPath}`
-    );
-
-    return new LocalAuth({
-      clientId: 'town-pizza-planet-local',
-      dataPath,
-      rmMaxRetries: 3,
-    });
-  }
-
-  const mongoose = getMongoose();
-
-  if (mongoose && MongoStore) {
-    console.log(
-      '🔐 Using RemoteAuth + MongoDB for persistent WhatsApp session.'
-    );
-
-    return new RemoteAuth({
-      store: new MongoStore({ mongoose }),
-      clientId: 'town-pizza-planet',
-      backupSyncIntervalMs: 300000,
-      dataPath: path.resolve(process.cwd(), '.wwebjs_remote'),
-    });
-  }
-
-  console.log(
-    '⚠️ MongoDB RemoteAuth unavailable. Falling back to LocalAuth.'
-  );
-
-  return new LocalAuth({
-    clientId: 'town-pizza-planet-local',
-    dataPath: path.resolve(process.cwd(), '.wwebjs_auth'),
-    rmMaxRetries: 3,
-  });
-}
-
-/* ============================================================
-   CREATE WHATSAPP CLIENT
-   ============================================================ */
-
-function buildClient() {
-  const executablePath =
-    process.env.PUPPETEER_EXECUTABLE_PATH ||
-    puppeteer.executablePath();
-
-  console.log(`🌐 Chrome executable: ${executablePath}`);
-
-  return new Client({
-    authStrategy: buildAuthStrategy(),
-
-    puppeteer: {
-      headless: USE_LOCAL_AUTH ? false : true,
-      executablePath,
-
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--disable-extensions',
-        '--disable-default-apps',
-        '--disable-sync',
-        '--disable-translate',
-        '--disable-component-update',
-        '--disable-background-networking',
-        '--disable-notifications',
-        '--disable-print-preview',
-        '--disable-hang-monitor',
-        '--metrics-recording-only',
-        '--mute-audio',
-        '--no-default-browser-check',
-        '--password-store=basic',
-        '--use-mock-keychain',
-        '--renderer-process-limit=1',
-        '--no-zygote',
-        '--disable-site-isolation-trials',
-        '--disable-features=Translate,OptimizationHints,MediaRouter,BackForwardCache',
-        '--no-first-run',
-      ],
+function buildAdapter(socket) {
+  return {
+    get raw() { return socket; },
+    async sendMessage(jid, content, options) {
+      const target = normalizeJid(jid);
+      const payload = typeof content === 'string' ? { text: content } : content;
+      return socket.sendMessage(target, payload, options);
     },
-
-    qrMaxRetries: 15,
-  });
+    async close() {
+      return socket?.end?.(new Error('Town Pizza Planet shutdown'));
+    },
+  };
 }
 
-/* ============================================================
-   SEND REPLY
-   ============================================================ */
-
-async function sendReply(chatId, reply) {
-  if (typeof reply === 'string') {
-    return sendWhatsAppMessageSafe(chatId, reply);
+async function ensureLibraries() {
+  if (!makeWASocket) {
+    const wa = require('@whiskeysockets/baileys');
+    makeWASocket = wa.default || wa.makeWASocket;
+    DisconnectReason = wa.DisconnectReason || {};
+    Browsers = wa.Browsers;
   }
-
-  if (!reply || !reply.type) {
-    return null;
+  if (!useMongoDBAuthState) {
+    const helper = require('mongo-baileys');
+    useMongoDBAuthState = helper.useMongoDBAuthState;
   }
-
-  if (reply.type === 'text') {
-    return sendWhatsAppMessageSafe(chatId, reply.body);
-  }
-
-  if (reply.type === 'buttons') {
-    return sendWhatsAppActionSafe(() => client.sendMessage(
-      chatId,
-      ui.makeButtonsObject(reply)
-    ));
-  }
-
-  if (reply.type === 'list') {
-    return sendWhatsAppActionSafe(() => client.sendMessage(
-      chatId,
-      ui.makeListObject(reply)
-    ));
-  }
-
-  if (reply.type === 'image') {
-    if (!reply.filePath || !fs.existsSync(reply.filePath)) {
-      console.error(
-        `⚠️ Image file not found: ${reply.filePath}`
-      );
-      return null;
-    }
-
-    return sendWhatsAppActionSafe(() => client.sendMessage(
-      chatId,
-      MessageMedia.fromFilePath(reply.filePath),
-      {
-        caption: reply.caption || '',
-      }
-    ));
-  }
-
-  return null;
 }
 
-/* ============================================================
-   START WHATSAPP
-   ============================================================ */
-
-async function startWhatsApp() {
-  /*
-   * IMPORTANT:
-   * Database initialization is intentionally NOT done here.
-   * server.js initializes the database before calling this function.
-   */
-
-  if (client) {
-    console.log('⚠️ WhatsApp client already exists.');
-    return client;
-  }
-
-  client = buildClient();
-
-  /* ----------------------------------------------------------
-     QR
-     ---------------------------------------------------------- */
-
-  client.on('qr', (qr) => {
-    global.__TPP_WHATSAPP_READY = false;
-    global.__TPP_WHATSAPP_STATUS = 'awaiting_qr';
-
-    // Keep the QR out of Render logs. Render's log viewer can mangle the
-    // terminal-art QR and make it effectively unscannable. The full-quality
-    // QR is exposed through /qr and /api/qr instead.
-    QRCode.toDataURL(qr, {
-      width: 720,
-      margin: 4,
-      errorCorrectionLevel: 'H',
-    })
-      .then((value) => {
-        global.__TPP_QR_DATA_URL = value;
-        console.log('📱 WhatsApp QR ready. Open /qr on the restaurant device to scan.');
-      })
-      .catch((err) => {
-        console.error('⚠️ Could not prepare WhatsApp QR for web display:', err?.message || err);
-      });
-  });
-
-  /* ----------------------------------------------------------
-     AUTHENTICATED
-     ---------------------------------------------------------- */
-
-  client.on('authenticated', () => {
-    global.__TPP_WHATSAPP_STATUS = 'authenticated';
-
-    console.log(
-      '✅ WhatsApp authenticated. Waiting for client ready...'
-    );
-  });
-
-  /* ----------------------------------------------------------
-     LOADING
-     ---------------------------------------------------------- */
-
-  client.on('loading_screen', (percent, message) => {
-    console.log(
-      `🌐 WhatsApp Web loading: ${percent}% — ${message}`
-    );
-  });
-
-  /* ----------------------------------------------------------
-     READY
-     ---------------------------------------------------------- */
-
-  client.on('ready', () => {
-    global.__TPP_WHATSAPP_READY = true;
-    global.__TPP_WHATSAPP_STATUS = 'ready';
-    global.__TPP_QR_DATA_URL = null;
-    reconnectAttempts = 0;
-
-    const whatsappNumber =
-      client.info?.wid?.user || 'unknown';
-
-    console.log(
-      `✅ ${STORE_NAME} WhatsApp bot is LIVE as ${whatsappNumber}`
-    );
-  });
-
-  /* ----------------------------------------------------------
-     AUTH FAILURE
-     ---------------------------------------------------------- */
-
-  client.on('auth_failure', (msg) => {
-    global.__TPP_WHATSAPP_READY = false;
-    global.__TPP_WHATSAPP_STATUS = 'auth_failure';
-    global.__TPP_QR_DATA_URL = null;
-
-    console.error(
-      '❌ WhatsApp authentication failed:',
-      msg
-    );
-  });
-
-  /* ----------------------------------------------------------
-     DISCONNECTED
-     ---------------------------------------------------------- */
-
-  client.on('disconnected', (reason) => {
-    global.__TPP_WHATSAPP_READY = false;
-    global.__TPP_WHATSAPP_STATUS = 'disconnected';
-    global.__TPP_QR_DATA_URL = null;
-
-    const why = String(reason || 'unknown');
-    console.error('⚠️ WhatsApp disconnected:', why);
-
-    // IMPORTANT: Never loop/reinitialize after QR expiry. Repeated
-    // initialize() calls can spawn/retain Chromium resources and push a
-    // Render Free instance over its 512 MB limit.
-    if (/Max qrcode retries reached/i.test(why)) {
-      global.__TPP_WHATSAPP_STATUS = 'qr_expired';
-      console.log('📱 WhatsApp QR expired. No automatic reinitialize — scan a fresh QR after restarting the service.');
-      return;
-    }
-
-    // For a genuine post-authentication/transient disconnect, allow a
-    // tightly bounded full client restart. Destroy the old Chromium client
-    // first so we never stack multiple browser instances.
-    if (!reconnecting && client && reconnectAttempts < 2) {
-      reconnecting = true;
-      reconnectAttempts += 1;
-      clearTimeout(reconnectTimer);
-      reconnectTimer = setTimeout(async () => {
-        const old = client;
-        try {
-          global.__TPP_WHATSAPP_STATUS = 'reconnecting';
-          console.log(`🔄 Restarting WhatsApp client (attempt ${reconnectAttempts}/2)...`);
-          try { await old.destroy(); } catch {}
-          if (client === old) client = null;
-          setWhatsAppClient(null);
-          await startWhatsApp();
-        } catch (err) {
-          global.__TPP_WHATSAPP_STATUS = 'disconnected';
-          console.error('❌ WhatsApp client restart failed:', err?.message || err);
-        } finally {
-          reconnecting = false;
-        }
-      }, 30000);
-    } else if (reconnectAttempts >= 2) {
-      console.log('⏸️ WhatsApp automatic restart limit reached. Restart/redeploy the service to try again.');
-    }
-  });
-
-  /* ----------------------------------------------------------
-     INCOMING MESSAGE
-     ---------------------------------------------------------- */
-
-  client.on('message', async (message) => {
-    try {
-      /*
-       * Ignore:
-       * - WhatsApp groups
-       * - status broadcasts
-       * - messages sent by this account itself
-       */
-
-      if (
-        message.from.includes('@g.us') ||
-        message.from === 'status@broadcast' ||
-        message.fromMe
-      ) {
-        return;
-      }
-
-      /*
-       * Button / list selection ID
-       */
-
-      const interactiveId =
-        message.selectedButtonId ||
-        message.selectedRowId ||
-        '';
-
-      const messageText =
-        interactiveId ||
-        message.body ||
-        '';
-
-      if (!messageText && !message.location) {
-        return;
-      }
-
-      /* --------------------------------------------------------
-         BUSINESS HOURS
-         -------------------------------------------------------- */
-
-      if (RESTRICT_HOURS) {
-        const hour = Number(
-          new Intl.DateTimeFormat('en-US', {
-            hour: '2-digit',
-            hour12: false,
-            timeZone: 'Asia/Kolkata',
-          }).format(new Date())
-        );
-
-        if (
-          hour < OPEN_HOUR ||
-          hour >= CLOSE_HOUR
-        ) {
-          await message.reply(
-            '🏠 We are currently closed. Please try again during business hours.'
-          );
-
-          return;
-        }
-      }
-
-      /* --------------------------------------------------------
-         CUSTOMER NAME
-         -------------------------------------------------------- */
-
-      let contactName = 'Customer';
-
-      try {
-        const contact = await message.getContact();
-
-        contactName =
-          contact.pushname ||
-          contact.name ||
-          contact.shortName ||
-          'Customer';
-      } catch {
-        // Keep default Customer
-      }
-
-      /* --------------------------------------------------------
-         CONVERSATION HANDLER
-         -------------------------------------------------------- */
-
-      const greetingWords = ['hi','hello','hey','start','begin','namaste','salaam','ನಮಸ್ಕಾರ','ನಮಸ್ತೆ','ಹಾಯ್','नमस्ते','हाय','سلام','ہیلو'];
-      const normalizedText = String(messageText || '').trim().toLowerCase();
-
-      // Free, reliable customer ordering interface: WhatsApp is the entry point;
-      // the interactive catalogue/checkout lives on our animated web app.
-      if (greetingWords.includes(normalizedText)) {
-        const baseUrl = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet-1.onrender.com').replace(/\/$/, '');
-        const phone = String(message.from || '').replace(/\D/g, '');
-        const orderUrl = `${baseUrl}/order?phone=${encodeURIComponent(phone)}&v=2`;
-        await sendWhatsAppMessageSafe(
-          message.from,
-          `👋 *Welcome to ${STORE_NAME}!*\n\n🍕 *Online Ordering*\n\n👉 ${orderUrl}\n\nTap the link to choose your language, browse the animated menu, add items to your cart, and checkout with Cash on Delivery.`
-        );
-        return;
-      }
-
-      const result = await handleMessage(
-        message.from,
-        messageText,
-        contactName
-      );
-
-      /* --------------------------------------------------------
-         SEND BOT REPLIES
-         -------------------------------------------------------- */
-
-      for (const reply of result.replies || []) {
-        await sendReply(
-          message.from,
-          reply
-        );
-      }
-
-      /* --------------------------------------------------------
-         OWNER NOTIFICATION
-         -------------------------------------------------------- */
-
-      if (
-        result.notifyOwner &&
-        OWNER_PHONE
-      ) {
-        const ownerId =
-          OWNER_PHONE.replace(/\D/g, '') +
-          '@c.us';
-
-        try {
-          await sendWhatsAppMessageSafe(
-            ownerId,
-            result.notifyOwner.message
-          );
-        } catch (err) {
-          console.error(
-            '⚠️ Owner notification failed:',
-            err.message
-          );
-        }
-      }
-    } catch (err) {
-      console.error(
-        '❌ Message handling error:',
-        err
-      );
-
-      try {
-        await message.reply(
-          '😥 Sorry, something went wrong. Please type *hi* to restart.'
-        );
-      } catch {
-        // Ignore reply failure
-      }
-    }
-  });
-
-  /*
-   * Make the WhatsApp client available to the admin server.
-   */
-
-  setWhatsAppClient(client);
-
-  /*
-   * Start WhatsApp.
-   *
-   * This is the ONLY place where initialize() is called.
-   * server.js calls startWhatsApp() exactly once.
-   */
-
-  await client.initialize();
-
-  if (!global.__TPP_MEMORY_MONITOR) {
-    global.__TPP_MEMORY_MONITOR = setInterval(() => {
-      const m = process.memoryUsage();
-      const rssMb = Math.round(m.rss / 1024 / 1024);
-      const heapMb = Math.round(m.heapUsed / 1024 / 1024);
-      console.log(`🧠 Memory: RSS ${rssMb} MB, heap ${heapMb} MB`);
-    }, 300000);
-    global.__TPP_MEMORY_MONITOR.unref?.();
-  }
-
-  return client;
-}
-
-/* ============================================================
-   SHUTDOWN
-   ============================================================ */
-
-async function shutdown() {
-  clearTimeout(reconnectTimer);
-  reconnectTimer = null;
-  reconnecting = false;
-
-  if (global.__TPP_MEMORY_MONITOR) {
-    clearInterval(global.__TPP_MEMORY_MONITOR);
-    global.__TPP_MEMORY_MONITOR = null;
-  }
-
-  if (!client) {
-    return;
-  }
-
-  try {
-    await client.destroy();
-  } catch {
-    // Ignore shutdown errors
-  }
-
-  client = null;
-
+function clearStatus() {
   global.__TPP_WHATSAPP_READY = false;
-  global.__TPP_WHATSAPP_STATUS = 'stopped';
   global.__TPP_QR_DATA_URL = null;
 }
 
-/*
- * IMPORTANT:
- *
- * DO NOT call startWhatsApp() here.
- *
- * server.js is responsible for starting the bot.
- */
+async function openMongoAuth() {
+  if (!MONGODB_URI) throw new Error('MONGODB_URI is not configured.');
+  if (!mongo) {
+    mongo = new MongoClient(MONGODB_URI, {
+      maxPoolSize: 3,
+      minPoolSize: 0,
+      serverSelectionTimeoutMS: 15000,
+      connectTimeoutMS: 15000,
+    });
+    await mongo.connect();
+  }
+
+  const db = mongo.db('town_pizza_planet');
+  const collection = db.collection('whatsapp_auth');
+  return useMongoDBAuthState(collection);
+}
+
+async function connectWhatsApp() {
+  await ensureLibraries();
+  manualStop = false;
+  clearStatus();
+  global.__TPP_WHATSAPP_STATUS = 'starting';
+
+  const { state, saveCreds } = await openMongoAuth();
+
+  const logger = P({ level: 'silent' });
+  const socket = makeWASocket({
+    auth: state,
+    logger,
+    browser: Browsers ? Browsers.ubuntu('Town Pizza Planet') : undefined,
+    printQRInTerminal: false,
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
+    generateHighQualityLinkPreview: false,
+  });
+
+  sock = socket;
+  adapter = buildAdapter(socket);
+  setWhatsAppClient(adapter);
+
+  socket.ev.on('creds.update', saveCreds);
+
+  socket.ev.on('connection.update', async (update) => {
+    const { connection, lastDisconnect, qr } = update;
+
+    if (qr) {
+      global.__TPP_WHATSAPP_READY = false;
+      global.__TPP_WHATSAPP_STATUS = 'awaiting_qr';
+      try {
+        global.__TPP_QR_DATA_URL = await QRCode.toDataURL(qr, {
+          width: 720,
+          margin: 4,
+          errorCorrectionLevel: 'H',
+        });
+        console.log('📱 WhatsApp QR ready. Open /qr on the restaurant device to scan.');
+      } catch (err) {
+        console.error('❌ QR generation failed:', err?.message || err);
+      }
+    }
+
+    if (connection === 'open') {
+      reconnectAttempts = 0;
+      global.__TPP_WHATSAPP_READY = true;
+      global.__TPP_WHATSAPP_STATUS = 'ready';
+      global.__TPP_QR_DATA_URL = null;
+      const me = socket.user?.id || 'unknown';
+      console.log(`✅ ${STORE_NAME} WhatsApp bot is LIVE as ${me}`);
+    }
+
+    if (connection === 'close') {
+      global.__TPP_WHATSAPP_READY = false;
+      global.__TPP_QR_DATA_URL = null;
+      const code = lastDisconnect?.error?.output?.statusCode ?? lastDisconnect?.error?.statusCode ?? 0;
+      const loggedOut = code === DisconnectReason.loggedOut;
+      global.__TPP_WHATSAPP_STATUS = loggedOut ? 'logged_out' : 'disconnected';
+      console.error(`⚠️ WhatsApp connection closed. code=${code || 'unknown'}${loggedOut ? ' (logged out)' : ''}`);
+
+      if (manualStop || loggedOut) {
+        if (loggedOut) console.log('🔒 WhatsApp logged out. A new QR scan is required.');
+        return;
+      }
+
+      if (!reconnectTimer && reconnectAttempts < 5) {
+        reconnectAttempts += 1;
+        reconnectTimer = setTimeout(async () => {
+          reconnectTimer = null;
+          if (manualStop) return;
+          try {
+            global.__TPP_WHATSAPP_STATUS = 'reconnecting';
+            await connectWhatsApp();
+          } catch (err) {
+            global.__TPP_WHATSAPP_STATUS = 'disconnected';
+            console.error('❌ WhatsApp reconnect failed:', err?.message || err);
+          }
+        }, Math.min(30000, 5000 * reconnectAttempts));
+      } else if (reconnectAttempts >= 5) {
+        global.__TPP_WHATSAPP_STATUS = 'retry_limit';
+        console.error('⏸️ WhatsApp reconnect limit reached. No Chromium restart loop is used.');
+      }
+    }
+  });
+
+  socket.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (type !== 'notify') return;
+
+    for (const message of messages || []) {
+      try {
+        if (!message?.message || message.key?.fromMe) continue;
+        const from = message.key.remoteJid;
+        if (!from || from.endsWith('@g.us') || from === 'status@broadcast') continue;
+
+        const text = String(
+          message.message.conversation ||
+          message.message.extendedTextMessage?.text ||
+          message.message.buttonsResponseMessage?.selectedButtonId ||
+          message.message.listResponseMessage?.singleSelectReply?.selectedRowId ||
+          ''
+        ).trim();
+
+        if (!text) continue;
+
+        const normalized = text.toLowerCase();
+        const greeting = new Set([
+          'hi','hello','hey','start','begin','namaste','salaam',
+          'ನಮಸ್ಕಾರ','ನಮಸ್ತೆ','ಹಾಯ್','नमस्ते','हाय','سلام','ہیلو'
+        ]);
+
+        if (greeting.has(normalized)) {
+          const phone = String(from).replace(/\D/g, '');
+          const orderUrl = `${ORDER_URL}/order?phone=${encodeURIComponent(phone)}&v=2`;
+          await adapter.sendMessage(from,
+            `👋 *Welcome to ${STORE_NAME}!*\n\n🏠 *For home delivery, please click the link below:*\n\n👉 ${orderUrl}\n\n🍕 Select your language, choose your food, enter your delivery details and confirm your order online.\n\n💵 Cash on Delivery available.`
+          );
+        }
+      } catch (err) {
+        console.error('⚠️ WhatsApp message handling failed:', err?.message || err);
+      }
+    }
+  });
+
+  global.__TPP_WHATSAPP_STATUS = state.creds.registered ? 'connecting' : 'awaiting_qr';
+  return adapter;
+}
+
+async function startWhatsApp() {
+  if (adapter && global.__TPP_WHATSAPP_READY) return adapter;
+  if (reconnecting) return adapter;
+  reconnecting = true;
+  try {
+    return await connectWhatsApp();
+  } finally {
+    reconnecting = false;
+  }
+}
+
+async function shutdown() {
+  manualStop = true;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  reconnecting = false;
+  clearStatus();
+  global.__TPP_WHATSAPP_STATUS = 'stopped';
+
+  try { await adapter?.close?.(); } catch {}
+  try { await mongo?.close?.(); } catch {}
+  sock = null;
+  adapter = null;
+  mongo = null;
+  setWhatsAppClient(null);
+}
 
 module.exports = {
   startWhatsApp,
