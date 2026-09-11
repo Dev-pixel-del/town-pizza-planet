@@ -38,6 +38,8 @@ const OPEN_HOUR = Number(process.env.OPEN_HOUR || 10);
 const CLOSE_HOUR = Number(process.env.CLOSE_HOUR || 23);
 
 let client = null;
+let reconnectTimer = null;
+let reconnecting = false;
 
 async function waitForWhatsAppReady(timeoutMs = 15000) {
   const start = Date.now();
@@ -322,10 +324,27 @@ async function startWhatsApp() {
     global.__TPP_WHATSAPP_STATUS = 'disconnected';
     global.__TPP_QR_DATA_URL = null;
 
-    console.error(
-      '⚠️ WhatsApp disconnected:',
-      reason
-    );
+    console.error('⚠️ WhatsApp disconnected:', reason);
+
+    // Keep the restaurant bot recoverable after QR timeout or a transient
+    // WhatsApp-Web disconnect. Do not create a second client; reinitialize
+    // the existing client so its event handlers remain intact.
+    if (!reconnecting && client) {
+      reconnecting = true;
+      clearTimeout(reconnectTimer);
+      reconnectTimer = setTimeout(async () => {
+        try {
+          console.log('🔄 Reinitializing WhatsApp client after disconnect...');
+          global.__TPP_WHATSAPP_STATUS = 'reconnecting';
+          global.__TPP_QR_DATA_URL = null;
+          await client.initialize();
+        } catch (err) {
+          console.error('❌ WhatsApp reinitialize failed:', err?.message || err);
+        } finally {
+          reconnecting = false;
+        }
+      }, 3000);
+    }
   });
 
   /* ----------------------------------------------------------
@@ -420,7 +439,7 @@ async function startWhatsApp() {
       // Free, reliable customer ordering interface: WhatsApp is the entry point;
       // the interactive catalogue/checkout lives on our animated web app.
       if (greetingWords.includes(normalizedText)) {
-        const baseUrl = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet.onrender.com').replace(/\/$/, '');
+        const baseUrl = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet-1.onrender.com').replace(/\/$/, '');
         const phone = String(message.from || '').replace(/\D/g, '');
         const orderUrl = `${baseUrl}/order?phone=${encodeURIComponent(phone)}&v=2`;
         await sendWhatsAppMessageSafe(
@@ -520,6 +539,10 @@ async function startWhatsApp() {
    ============================================================ */
 
 async function shutdown() {
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  reconnecting = false;
+
   if (global.__TPP_MEMORY_MONITOR) {
     clearInterval(global.__TPP_MEMORY_MONITOR);
     global.__TPP_MEMORY_MONITOR = null;
