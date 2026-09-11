@@ -3,6 +3,7 @@ require('dotenv').config();
 const QRCode = require('qrcode');
 const { Client, RemoteAuth, LocalAuth } = require('whatsapp-web.js');
 const { MongoStore } = require('wwebjs-mongo');
+const puppeteer = require('puppeteer');
 const mongoose = require('mongoose');
 const { setWhatsAppClient } = require('./admin/server');
 const whatsappState = require('./whatsappState');
@@ -16,8 +17,6 @@ let manualStop = false;
 let initializing = false;
 let resetting = false;
 
-const MONGODB_URI = process.env.MONGODB_URI || '';
-const USE_LOCAL_AUTH = String(process.env.LOCAL_AUTH || '').toLowerCase() === 'true';
 const STORE_NAME = process.env.STORE_NAME || 'Town Pizza Planet';
 const ORDER_URL = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet-1.onrender.com').replace(/\/$/, '');
 const OWNER_PHONE = String(process.env.OWNER_PHONE || '').replace(/\D/g, '');
@@ -95,6 +94,7 @@ async function initializeClient() {
       authStrategy,
       puppeteer: {
         headless: true,
+        executablePath: puppeteer.executablePath(),
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu'],
       },
       takeoverOnConflict: false,
