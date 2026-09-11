@@ -9,7 +9,6 @@ const whatsappState = require('./whatsappState');
 let makeWASocket;
 let DisconnectReason;
 let Browsers;
-let useMongoDBAuthState;
 
 let sock = null;
 let adapter = null;
@@ -68,9 +67,64 @@ async function ensureLibraries() {
     DisconnectReason = wa.DisconnectReason || {};
     Browsers = wa.Browsers;
   }
-  if (!useMongoDBAuthState) {
-    const helper = require('mongo-baileys');
-    useMongoDBAuthState = helper.useMongoDBAuthState;
+}
+
+function toBufferDeep(value) {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (value instanceof ArrayBuffer) return Buffer.from(value);
+  if (!value || typeof value !== 'object') return value;
+
+  // BSON Binary instances can arrive from MongoDB as driver objects.
+  if (value?._bsontype === 'Binary' && typeof value.value === 'function') {
+    try { return Buffer.from(value.value(true)); } catch {}
+  }
+  if (value?._bsontype === 'Binary' && value.buffer != null) {
+    try { return Buffer.from(value.buffer); } catch {}
+  }
+
+  // BufferJSON / legacy JSON Buffer representation.
+  if (value.type === 'Buffer' && Array.isArray(value.data)) {
+    return Buffer.from(value.data);
+  }
+  if (value.type === 'Buffer' && typeof value.data === 'string') {
+    return Buffer.from(value.data, 'base64');
+  }
+
+  // Plain numeric-key objects can be the result of malformed/legacy BSON
+  // serialization. Preserve only byte-like shapes as Buffers.
+  const keys = Object.keys(value);
+  if (keys.length && keys.every(k => /^\d+$/.test(k))) {
+    const nums = keys.sort((a,b) => Number(a)-Number(b)).map(k => value[k]);
+    if (nums.every(n => Number.isInteger(n) && n >= 0 && n <= 255)) {
+      return Buffer.from(nums);
+    }
+  }
+
+  if (Array.isArray(value)) return value.map(toBufferDeep);
+  const out = {};
+  for (const [key, child] of Object.entries(value)) out[key] = toBufferDeep(child);
+  return out;
+}
+
+function serializeForMongo(value) {
+  const { BufferJSON } = require('@whiskeysockets/baileys');
+  return JSON.parse(JSON.stringify(value, BufferJSON.replacer));
+}
+
+function reviveFromMongo(value) {
+  if (value == null) return value;
+  try {
+    const { BufferJSON } = require('@whiskeysockets/baileys');
+    const normalized = JSON.parse(JSON.stringify(value, (key, child) => {
+      if (child && typeof child === 'object' && child._bsontype === 'Binary' && typeof child.toString === 'function') {
+        try { return { type: 'Buffer', data: Buffer.from(child.value(true)).toString('base64') }; } catch {}
+      }
+      return child;
+    }));
+    return toBufferDeep(JSON.parse(JSON.stringify(normalized), BufferJSON.reviver));
+  } catch {
+    return toBufferDeep(value);
   }
 }
 
@@ -95,7 +149,67 @@ async function openMongoAuth() {
 
   const db = mongo.db(AUTH_DB_NAME);
   const collection = db.collection(AUTH_COLLECTION_NAME);
-  return useMongoDBAuthState(collection);
+
+  // V30 uses an in-project auth-state adapter instead of mongo-baileys.
+  // This prevents BSON Binary / plain-object values from reaching Node crypto.
+  const WAProto = require('@whiskeysockets/baileys/WAProto');
+  const { initAuthCreds } = require('@whiskeysockets/baileys/lib/Utils/auth-utils');
+
+  const readData = async (id) => {
+    try {
+      const doc = await collection.findOne({ _id: id });
+      if (!doc) return null;
+      const data = { ...doc };
+      delete data._id;
+      return reviveFromMongo(data);
+    } catch (err) {
+      console.error(`❌ WhatsApp auth read failed (${id}):`, err?.message || err);
+      return null;
+    }
+  };
+
+  const writeData = async (data, id) => {
+    const encoded = serializeForMongo(data);
+    await collection.replaceOne({ _id: id }, encoded, { upsert: true });
+  };
+
+  const removeData = async (id) => {
+    await collection.deleteOne({ _id: id });
+  };
+
+  const savedCreds = await readData('auth_creds');
+  const creds = reviveFromMongo(savedCreds?.creds) || initAuthCreds();
+  const state = {
+    creds,
+    keys: {
+      get: async (type, ids) => {
+        const out = {};
+        await Promise.all(ids.map(async id => {
+          let value = await readData(`${type}-${id}`);
+          if (type === 'app-state-sync-key' && value) {
+            value = WAProto.proto.Message.AppStateSyncKeyData.fromObject(value);
+          }
+          out[id] = value;
+        }));
+        return out;
+      },
+      set: async data => {
+        const tasks = [];
+        for (const category of Object.keys(data || {})) {
+          for (const [id, value] of Object.entries(data[category] || {})) {
+            const key = `${category}-${id}`;
+            tasks.push(value ? writeData(value, key) : removeData(key));
+          }
+        }
+        await Promise.all(tasks);
+      },
+    },
+  };
+
+  return {
+    state,
+    saveCreds: async () => writeData({ creds: state.creds }, 'auth_creds'),
+  };
 }
 
 async function connectWhatsApp() {

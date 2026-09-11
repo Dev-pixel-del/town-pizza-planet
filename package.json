@@ -1,6 +1,6 @@
 {
   "name": "town-pizza-planet",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "description": "Town Pizza Planet WhatsApp ordering bot with MongoDB persistence and restaurant dashboard",
   "main": "src/server.js",
@@ -16,7 +16,6 @@
     "@whiskeysockets/baileys": "^6.7.24",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "mongo-baileys": "^1.0.1",
     "mongodb": "^7.6.0",
     "mongoose": "^8.18.0",
     "pino": "^10.3.1",
