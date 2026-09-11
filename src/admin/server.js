@@ -480,17 +480,6 @@ app.put('/api/templates', requireAuth, async(req,res)=>{await updateState(s=>{s.
 app.get('/api/audit', requireAuth,(req,res)=>res.json({success:true,logs:getState().auditLog.slice(0,200)}));
 app.get('/api/errors', requireAuth,(req,res)=>res.json({success:true,logs:getState().errorLog.slice(0,200)}));
 app.get('/api/system', requireAuth,(req,res)=>res.json({success:true,database:require('../db/database').getDatabaseMode(),whatsapp:{ready:global.__TPP_WHATSAPP_READY===true,status:global.__TPP_WHATSAPP_STATUS||'unknown'},uptime:process.uptime(),memory:process.memoryUsage(),node:process.version,cwd:process.cwd(),uploads:fs.existsSync(path.join(process.cwd(),'public','uploads'))}));
-app.post('/api/whatsapp/reset', requireAuth, async (req,res)=>{
-  try {
-    const { resetWhatsAppAuth } = require('../bot');
-    await resetWhatsAppAuth();
-    await appendAudit('whatsapp.auth_reset', { by: req.adminSession?.createdAt || null });
-    res.json({success:true,message:'WhatsApp authentication state cleared. A fresh QR should appear shortly.',status:whatsappState.status});
-  } catch (err) {
-    await appendError(err.message,{route:'/api/whatsapp/reset'});
-    res.status(500).json({success:false,error:'Could not reset WhatsApp authentication.'});
-  }
-});
 
 app.get('/api/backup', requireAuth,(req,res)=>{const backup={version:1,createdAt:new Date().toISOString(),orders:allOrders(),adminState:clone(getState())};res.setHeader('Content-Type','application/json');res.setHeader('Content-Disposition','attachment; filename="town-pizza-planet-backup.json"');res.send(JSON.stringify(backup,null,2));});
 app.post('/api/restore', requireAuth, async(req,res)=>{const b=req.body||{};if(!b.adminState||typeof b.adminState!=='object')return res.status(400).json({success:false,error:'Invalid backup'});await updateState(()=>b.adminState);await appendAudit('system.backup_restored',{createdAt:b.createdAt||null});res.json({success:true});});
@@ -502,6 +491,17 @@ app.get('/api/export/expenses', requireAuth,(req,res)=>{sendCsv(res,'expenses.cs
 app.post('/api/upload-image', requireAuth, async(req,res)=>{try{const b=req.body||{};const name=String(b.name||'').replace(/[^a-zA-Z0-9._-]/g,'_');const mime=String(b.mime||'');const data=String(b.data||'');if(!name||!/^data:image\/(jpeg|png|webp);base64,/i.test(data))return res.status(400).json({success:false,error:'Upload a JPEG, PNG or WebP image.'});const ext=mime.includes('png')?'.png':mime.includes('webp')?'.webp':'.jpg';const base=path.basename(name).replace(/\.[^.]+$/,'');const final=`${base}-${Date.now()}${ext}`;const dir=path.join(process.cwd(),'public','uploads');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,final),Buffer.from(data.split(',')[1],'base64'));await appendAudit('image.uploaded',{name:final});res.json({success:true,path:`/uploads/${final}`});}catch(err){await appendError(err.message,{route:'/api/upload-image'});res.status(500).json({success:false,error:'Image upload failed'});}});
 app.get('/api/images', requireAuth,(req,res)=>{const dir=path.join(process.cwd(),'public','uploads');fs.mkdirSync(dir,{recursive:true});const files=fs.readdirSync(dir).filter(f=>/\.(jpe?g|png|webp)$/i.test(f)).map(f=>({name:f,path:`/uploads/${f}`,size:fs.statSync(path.join(dir,f)).size}));res.json({success:true,images:files});});
 app.delete('/api/images/:name', requireAuth, async(req,res)=>{const name=path.basename(req.params.name);const file=path.join(process.cwd(),'public','uploads',name);if(fs.existsSync(file))fs.unlinkSync(file);await appendAudit('image.deleted',{name});res.json({success:true});});
+
+app.post('/api/whatsapp/reset', requireAuth, async(req,res)=>{
+  try {
+    const { resetWhatsAppAuth } = require('../bot');
+    const ok = await resetWhatsAppAuth();
+    res.json({success:Boolean(ok),status:global.__TPP_WHATSAPP_STATUS||'starting'});
+  } catch(err) {
+    await appendError(err.message,{route:'/api/whatsapp/reset'});
+    res.status(500).json({success:false,error:'Could not reset WhatsApp session.'});
+  }
+});
 
 app.post('/api/daily-summary', requireAuth, async(req,res)=>{const date=String(req.body?.date||isoDay());const list=allOrders().filter(o=>isoDay(o.created_at)===date);const sales=list.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+safeNumber(o.total),0);const top={};list.forEach(o=>(o.items||[]).forEach(i=>{top[i.name]=(top[i.name]||0)+safeNumber(i.qty);}));const topItem=Object.entries(top).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';const tpl=getState().messageTemplates?.daily_summary||'📊 Daily Summary\\nOrders: {orders}\\nSales: ₹{sales}\\nTop item: {top_item}';const msg=tpl.replaceAll('{orders}',String(list.length)).replaceAll('{sales}',String(sales)).replaceAll('{top_item}',topItem);const owner=digits(process.env.OWNER_PHONE);const ok=Boolean(whatsappClient&&owner)?await sendStatusNotificationSafe(whatsappClient,`${owner}@c.us`,msg):false;res.json({success:true,sent:ok,message:msg});});
 
@@ -518,7 +518,7 @@ app.get('/api/qr',(req,res)=>{
   res.setHeader('Cache-Control','no-store, no-cache, must-revalidate');
   const age = whatsappState.qrCreatedAt ? Date.now() - whatsappState.qrCreatedAt : Infinity;
   const freshQr = age <= 90000 ? whatsappState.qrDataUrl : null;
-  res.json({status:whatsappState.status || global.__TPP_WHATSAPP_STATUS || 'starting', ready:whatsappState.ready === true || global.__TPP_WHATSAPP_READY === true, qr:freshQr, qrAgeMs:Number.isFinite(age)?age:null, lastDisconnect:whatsappState.lastDisconnect || null});
+  res.json({status:whatsappState.status || global.__TPP_WHATSAPP_STATUS || 'starting', ready:whatsappState.ready === true || global.__TPP_WHATSAPP_READY === true, qr:freshQr, qrAgeMs:Number.isFinite(age)?age:null});
 });
 app.get('/api/qr.png',(req,res)=>{
   res.setHeader('Cache-Control','no-store, no-cache, must-revalidate');
