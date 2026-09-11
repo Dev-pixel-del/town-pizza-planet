@@ -40,6 +40,7 @@ const CLOSE_HOUR = Number(process.env.CLOSE_HOUR || 23);
 let client = null;
 let reconnectTimer = null;
 let reconnecting = false;
+let reconnectAttempts = 0;
 
 async function waitForWhatsAppReady(timeoutMs = 15000) {
   const start = Date.now();
@@ -158,12 +159,15 @@ function buildClient() {
         '--no-default-browser-check',
         '--password-store=basic',
         '--use-mock-keychain',
-        '--renderer-process-limit=2',
+        '--renderer-process-limit=1',
+        '--no-zygote',
+        '--disable-site-isolation-trials',
+        '--disable-features=Translate,OptimizationHints,MediaRouter,BackForwardCache',
         '--no-first-run',
       ],
     },
 
-    qrMaxRetries: 30,
+    qrMaxRetries: 15,
   });
 }
 
@@ -291,6 +295,7 @@ async function startWhatsApp() {
     global.__TPP_WHATSAPP_READY = true;
     global.__TPP_WHATSAPP_STATUS = 'ready';
     global.__TPP_QR_DATA_URL = null;
+    reconnectAttempts = 0;
 
     const whatsappNumber =
       client.info?.wid?.user || 'unknown';
@@ -324,26 +329,43 @@ async function startWhatsApp() {
     global.__TPP_WHATSAPP_STATUS = 'disconnected';
     global.__TPP_QR_DATA_URL = null;
 
-    console.error('⚠️ WhatsApp disconnected:', reason);
+    const why = String(reason || 'unknown');
+    console.error('⚠️ WhatsApp disconnected:', why);
 
-    // Keep the restaurant bot recoverable after QR timeout or a transient
-    // WhatsApp-Web disconnect. Do not create a second client; reinitialize
-    // the existing client so its event handlers remain intact.
-    if (!reconnecting && client) {
+    // IMPORTANT: Never loop/reinitialize after QR expiry. Repeated
+    // initialize() calls can spawn/retain Chromium resources and push a
+    // Render Free instance over its 512 MB limit.
+    if (/Max qrcode retries reached/i.test(why)) {
+      global.__TPP_WHATSAPP_STATUS = 'qr_expired';
+      console.log('📱 WhatsApp QR expired. No automatic reinitialize — scan a fresh QR after restarting the service.');
+      return;
+    }
+
+    // For a genuine post-authentication/transient disconnect, allow a
+    // tightly bounded full client restart. Destroy the old Chromium client
+    // first so we never stack multiple browser instances.
+    if (!reconnecting && client && reconnectAttempts < 2) {
       reconnecting = true;
+      reconnectAttempts += 1;
       clearTimeout(reconnectTimer);
       reconnectTimer = setTimeout(async () => {
+        const old = client;
         try {
-          console.log('🔄 Reinitializing WhatsApp client after disconnect...');
           global.__TPP_WHATSAPP_STATUS = 'reconnecting';
-          global.__TPP_QR_DATA_URL = null;
-          await client.initialize();
+          console.log(`🔄 Restarting WhatsApp client (attempt ${reconnectAttempts}/2)...`);
+          try { await old.destroy(); } catch {}
+          if (client === old) client = null;
+          setWhatsAppClient(null);
+          await startWhatsApp();
         } catch (err) {
-          console.error('❌ WhatsApp reinitialize failed:', err?.message || err);
+          global.__TPP_WHATSAPP_STATUS = 'disconnected';
+          console.error('❌ WhatsApp client restart failed:', err?.message || err);
         } finally {
           reconnecting = false;
         }
-      }, 3000);
+      }, 30000);
+    } else if (reconnectAttempts >= 2) {
+      console.log('⏸️ WhatsApp automatic restart limit reached. Restart/redeploy the service to try again.');
     }
   });
 
