@@ -2,11 +2,14 @@
   "id": "/order/",
   "name": "Town Pizza Planet",
   "short_name": "Town Pizza Planet",
-  "description": "Order fresh, hot food from Town Pizza Planet.",
+  "description": "Your town’s favorite slice of the planet. Order from Town Pizza Planet.",
   "start_url": "/order/",
   "scope": "/order/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "orientation": "portrait",
   "background_color": "#120f0d",
   "theme_color": "#120f0d",

@@ -4,6 +4,7 @@ const { getCatalog, getCatalogLookup, calculateDelivery } = require('./orderData
 const { createOrder, getOrderById, getOrdersByPhone } = require('../db/database');
 const { EXTRA_CHEESE_PRICE } = require('../data/menu');
 const { isBlocked, updateState, getState, getOrderMeta, appendAudit, applyRawMaterialsForOrder } = require('../admin/adminStore');
+const { createOrderAlert, alertView, expirePendingOrders } = require('../ownerAlerts');
 
 function createOrderRouter(getWhatsAppClient = () => null) {
   const router = express.Router();
@@ -35,10 +36,11 @@ function createOrderRouter(getWhatsAppClient = () => null) {
     try {
       const orderId = String(req.params.orderId || '').trim(); const phone = String(req.query.phone || '').replace(/\D/g, '');
       if (!orderId || !phone) return res.status(400).json({ success: false, error: 'Order ID and phone number are required.' });
+      try { await expirePendingOrders(); } catch (expiryError) { console.warn('⚠️ Order alert expiry check failed:', expiryError?.message || expiryError); }
       const order = getOrderById(orderId); if (!order) return res.status(404).json({ success: false, error: 'Order not found.' });
       const storedPhone = String(order.user_id || '').replace(/\D/g, ''); if (!storedPhone || !storedPhone.includes(phone)) return res.status(403).json({ success: false, error: 'Order access denied.' });
       const meta=await ensureAutoDriver(order);
-      const enriched={...order,admin:{driver:meta.driver||'',driverPhone:meta.driverPhone||'',driverAssignedAt:meta.driverAssignedAt||null,driverAutoAssigned:Boolean(meta.driverAutoAssigned),feedback:meta.feedback||null,restaurantNote:meta.customerNote||meta.restaurantNote||order.restaurant_note||''}};
+      const enriched={...order,admin:{driver:meta.driver||'',driverPhone:meta.driverPhone||'',driverAssignedAt:meta.driverAssignedAt||null,driverAutoAssigned:Boolean(meta.driverAutoAssigned),feedback:meta.feedback||null,restaurantNote:meta.customerNote||meta.restaurantNote||order.restaurant_note||''},confirmation:alertView(order)};
       return res.json({ success: true, order: enriched });
     } catch (err) { console.error('❌ Order status failed:', err); return res.status(500).json({ success:false, error:'Could not load order status.' }); }
   });
@@ -91,6 +93,7 @@ function createOrderRouter(getWhatsAppClient = () => null) {
       const total = subtotal + delivery.charge; const userId = `${phone}@web`;
       const orderId = await createOrder(userId,name,normalized,subtotal,total,{ address, landmark, language, payment_method:'COD', location, delivery_zone:delivery.zone.name, delivery_zone_id:delivery.zone.id, delivery_charge:delivery.charge, free_delivery:delivery.charge===0, estimated_minutes:delivery.estimatedMinutes||30, restaurant_note:restaurantNote, source:'web' });
       const order = getOrderById(orderId);
+      try { await createOrderAlert(order); } catch (alertError) { console.error('⚠️ Owner order alert failed:', alertError?.message || alertError); }
       // Deduct raw materials only after the order exists. Never fail an otherwise
       // successful customer order because inventory bookkeeping has an error.
       try { await applyRawMaterialsForOrder(order, normalized); }

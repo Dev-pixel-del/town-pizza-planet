@@ -358,6 +358,7 @@ function home(preserve=false){
   </section>
   ${customerAdminNotices()}
   ${marketingBanner()}
+  ${installCardHtml()}
   ${comboOfDayCard()}
   <section class="home-grid">
     ${homeBtn('🔥',t('bestsellers'),t('customerFavourites'),'bestsellers')}
@@ -635,9 +636,9 @@ function setupVoiceConfirmation(order){
 function trackingPage(){
   const o=state.lastOrder;if(!o?.order_id)return home();
   const minutes=Number(o.estimated_minutes||30); const eta=new Date(new Date(o.created_at||Date.now()).getTime()+minutes*60000);
-  const status=o.status||'received'; const steps=[['received',t('receivedStatus'),'✓'],['preparing',t('preparing'),'🔥'],['ready',t('ready'),'🍕'],['out_for_delivery',t('outForDelivery'),'🛵'],['delivered',t('delivered'),'✓']]; const idx=Math.max(0,steps.findIndex(s=>s[0]===status));
+  const status=o.status||'received'; const cancelled=status==='cancelled'; const steps=[['received',t('receivedStatus'),'✓'],['preparing',t('preparing'),'🔥'],['ready',t('ready'),'🍕'],['out_for_delivery',t('outForDelivery'),'🛵'],['delivered',t('delivered'),'✓']]; const idx=Math.max(0,steps.findIndex(s=>s[0]===status));
   clearInterval(state.etaTimer);
-  render(`<section class="success"><div class="success-card glow-card tracking-card"><div class="order-seal" aria-label="Town Pizza Planet sealed logo"><div class="order-seal-ring"></div><div class="order-seal-glow"></div><div class="order-seal-plate"><img src="/order/logo.jpg" alt="Town Pizza Planet logo"></div><span>SEALED</span></div><div class="success-icon">✓</div><p class="eyebrow">${escapeHtml(t('orderConfirmed'))}</p><h1>${escapeHtml(t('wereOnIt'))} 🍕</h1><p class="success-copy">${escapeHtml(t('received'))}</p><div class="voice-confirmation-card" role="region" aria-label="${escapeHtml(t('voiceConfirmationReady'))}"><audio id="tppVoiceConfirmation" preload="auto" playsinline src="${escapeHtml(getVoiceConfirmationConfig(o).src)}"></audio><div><p class="eyebrow">${escapeHtml(t('voiceConfirmationReady'))}</p><p id="tppVoiceConfirmationStatus" class="muted">${escapeHtml(t('voiceConfirmationReady'))}</p></div><button id="tppVoiceConfirmationBtn" class="primary-btn" type="button">${escapeHtml(t('playVoiceConfirmation'))}</button></div><div class="order-id">${escapeHtml(o.order_id)}</div><div class="eta-card"><div class="eta-ring"><strong id="etaTime">--:--</strong><small>min : sec</small></div><div><p class="eyebrow">${escapeHtml(t('arriving'))}</p><strong>${escapeHtml(t('about'))} ${minutes} ${escapeHtml(t('minutes'))}</strong><span>${escapeHtml(t('estimated'))} ${escapeHtml(`${minutes} ${t('minutes')}`)}</span></div></div><div class="timeline">${steps.map((s,i)=>`<div class="timeline-step ${i<=idx?'done':''} ${s[0]===status?'current':''}"><span>${s[2]}</span><div><strong>${escapeHtml(s[1])}</strong>${i===idx?`<small>${escapeHtml(t('orderStatus'))}</small>`:''}</div></div>`).join('')}</div><div class="tracking-meta"><span>💵 ${escapeHtml(t('cashTotal'))}</span><strong>${money(o.total)}</strong></div>${o.admin?.driver?`<div class="driver-tracking-card"><div><p class="eyebrow">DELIVERY DRIVER</p><strong>🛵 ${escapeHtml(o.admin.driver)}</strong><span>${escapeHtml(o.admin.driverPhone||'')}</span></div><a class="contact-btn" href="tel:${escapeHtml(o.admin.driverPhone||'')}">📞 Call Driver</a></div>`:''}<div class="tracking-actions"><button class="primary-btn" data-share-order>${escapeHtml(t('share'))}</button><button class="ghost-btn boxed" data-receipt>${escapeHtml(t('downloadReceipt'))}</button><button class="ghost-btn boxed" data-print-receipt>${escapeHtml(t('printReceipt'))}</button></div><div class="contact-panel"><p class="eyebrow">${escapeHtml(t('contactRestaurant'))}</p><div class="contact-actions"><a class="contact-btn" href="tel:9448769098">📞 9448769098</a><a class="contact-btn" href="tel:6362648283">📞 6362648283</a></div></div><section class="feedback-card">
+  render(`<section class="success"><div class="success-card glow-card tracking-card"><div class="order-seal" aria-label="Town Pizza Planet sealed logo"><div class="order-seal-ring"></div><div class="order-seal-glow"></div><div class="order-seal-plate"><img src="/order/logo.jpg" alt="Town Pizza Planet logo"></div><span>SEALED</span></div><div class="success-icon">${cancelled?'✕':'✓'}</div><p class="eyebrow">${escapeHtml(cancelled?'ORDER CANCELLED':t('orderConfirmed'))}</p><h1>${escapeHtml(cancelled?'We could not confirm your order':t('wereOnIt'))}${cancelled?'':' 🍕'}</h1><p class="success-copy">${escapeHtml(o.status==='cancelled' && o.confirmation?.cancellationReason ? o.confirmation.cancellationReason : t('received'))}</p>${o.status==='received' && o.confirmation?.pending ? `<div class="confirmation-wait-card"><div class="confirm-pulse">🚨</div><div><strong>Waiting for restaurant confirmation</strong><p>Your order must be acknowledged within <span id="confirmCountdown">2:00</span>.</p></div></div>`:''}${o.status==='cancelled' && o.confirmation?.cancellationReason ? `<div class="confirmation-cancel-card">❌ <strong>Your order was cancelled automatically.</strong><p>Please place a new order when you are ready.</p></div>`:''}<div class="voice-confirmation-card" role="region" aria-label="${escapeHtml(t('voiceConfirmationReady'))}"><audio id="tppVoiceConfirmation" preload="auto" playsinline src="${escapeHtml(getVoiceConfirmationConfig(o).src)}"></audio><div><p class="eyebrow">${escapeHtml(t('voiceConfirmationReady'))}</p><p id="tppVoiceConfirmationStatus" class="muted">${escapeHtml(t('voiceConfirmationReady'))}</p></div><button id="tppVoiceConfirmationBtn" class="primary-btn" type="button">${escapeHtml(t('playVoiceConfirmation'))}</button></div><div class="order-id">${escapeHtml(o.order_id)}</div><div class="eta-card"><div class="eta-ring"><strong id="etaTime">--:--</strong><small>min : sec</small></div><div><p class="eyebrow">${escapeHtml(t('arriving'))}</p><strong>${escapeHtml(t('about'))} ${minutes} ${escapeHtml(t('minutes'))}</strong><span>${escapeHtml(t('estimated'))} ${escapeHtml(`${minutes} ${t('minutes')}`)}</span></div></div><div class="timeline">${steps.map((s,i)=>`<div class="timeline-step ${i<=idx?'done':''} ${s[0]===status?'current':''}"><span>${s[2]}</span><div><strong>${escapeHtml(s[1])}</strong>${i===idx?`<small>${escapeHtml(t('orderStatus'))}</small>`:''}</div></div>`).join('')}</div><div class="tracking-meta"><span>💵 ${escapeHtml(t('cashTotal'))}</span><strong>${money(o.total)}</strong></div>${o.admin?.driver?`<div class="driver-tracking-card"><div><p class="eyebrow">DELIVERY DRIVER</p><strong>🛵 ${escapeHtml(o.admin.driver)}</strong><span>${escapeHtml(o.admin.driverPhone||'')}</span></div><a class="contact-btn" href="tel:${escapeHtml(o.admin.driverPhone||'')}">📞 Call Driver</a></div>`:''}<div class="tracking-actions"><button class="primary-btn" data-share-order>${escapeHtml(t('share'))}</button><button class="ghost-btn boxed" data-receipt>${escapeHtml(t('downloadReceipt'))}</button><button class="ghost-btn boxed" data-print-receipt>${escapeHtml(t('printReceipt'))}</button></div><div class="contact-panel"><p class="eyebrow">${escapeHtml(t('contactRestaurant'))}</p><div class="contact-actions"><a class="contact-btn" href="tel:9448769098">📞 9448769098</a><a class="contact-btn" href="tel:6362648283">📞 6362648283</a></div></div><section class="feedback-card">
   <p class="eyebrow">${escapeHtml(t('feedbackTitle'))}</p>
   <p class="muted feedback-subtitle">${escapeHtml(t('feedbackSubtitle'))}</p>
   <div class="star-rating" role="radiogroup" aria-label="5 star rating">
@@ -651,7 +652,7 @@ function trackingPage(){
   setupVoiceConfirmation(o);
   initFeedbackControls(o.order_id);
   const tick=()=>{const el=document.getElementById('etaTime'); if(!el)return; const diff=Math.max(0,eta-Date.now());const totalSec=Math.floor(diff/1000);const mm=Math.floor(totalSec/60);const ss=totalSec%60;el.textContent=`${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;};
-  tick(); state.etaTimer=setInterval(tick,1000); startStatusPolling(o.order_id);
+  tick(); state.etaTimer=setInterval(tick,1000); const confirmTick=()=>{const c=document.getElementById('confirmCountdown');if(!c||!o.confirmation?.deadlineAt)return;const sec=Math.max(0,Math.ceil((new Date(o.confirmation.deadlineAt).getTime()-Date.now())/1000));c.textContent=`${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`}; confirmTick(); clearInterval(state.confirmTimer); state.confirmTimer=setInterval(confirmTick,1000); startStatusPolling(o.order_id);
 }
 
 let selectedFeedbackRating = 0;
@@ -697,10 +698,7 @@ function initFeedbackControls(orderId){
   });
 }
 
-function startStatusPolling(orderId){clearInterval(state.statusTimer);if(!state.phone)return;state.statusTimer=setInterval(async()=>{try{const r=await fetch(`/api/order/status/${encodeURIComponent(orderId)}?phone=${encodeURIComponent(state.phone)}`,{cache:'no-store'});const d=await r.json();if(d.success&&d.order){const old=state.lastOrder?.status;const oldDriver=state.lastOrder?.admin?.driver||'';state.lastOrder=d.order;saveJson('tpp_last_order',state.lastOrder);const newDriver=d.order?.admin?.driver||'';if((old&&old!==d.order.status)||(oldDriver!==newDriver)){ notifyStatus(d.order.status,orderId);if(state.view==='tracking')trackingPage();}if(d.order.status==='delivered'||d.order.status==='cancelled')clearInterval(state.statusTimer);}}catch{}},15000);}
-async function loadOrderHistory(){if(!state.phone)return[];try{const r=await fetch(`/api/order/history?phone=${encodeURIComponent(state.phone)}`,{cache:'no-store'});const d=await r.json();return d.success?(d.orders||[]):[];}catch{return[];}}
-let historyCache=[];
-function recentOrdersSection(){if(!historyCache.length)return '';return `<section class="mini-section"><div class="section-head"><div><p class="eyebrow">${escapeHtml(t('recentOrders'))}</p><h2>${escapeHtml(t('recentOrders'))}</h2></div></div><div class="history-row">${historyCache.slice(0,3).map(orderHistoryCard).join('')}</div></section>`;}
+function startStatusPolling(orderId){clearInterval(state.statusTimer);if(!state.phone)return;const poll=async()=>{try{const r=await fetch(`/api/order/status/${encodeURIComponent(orderId)}?phone=${encodeURIComponent(state.phone)}`,{cache:'no-store'});const d=await r.json();if(d.success&&d.order){const old=state.lastOrder?.status;const oldDriver=state.lastOrder?.admin?.driver||'';state.lastOrder=d.order;saveJson('tpp_last_order',state.lastOrder);const newDriver=d.order?.admin?.driver||'';if((old&&old!==d.order.status)||(oldDriver!==newDriver)){notifyStatus(d.order.status,orderId);if(state.view==='tracking')trackingPage();}if(d.order.status==='delivered'||d.order.status==='cancelled'){clearInterval(state.statusTimer);}}}catch{}};poll();const interval=state.lastOrder?.status==='received'?2000:15000;state.statusTimer=setInterval(poll,interval);}
 function statusLabel(status){return({received:t('receivedStatus'),preparing:t('preparing'),ready:t('ready'),out_for_delivery:t('outForDelivery'),delivered:t('delivered'),cancelled:t('cancelled')}[status]||status);}
 function orderHistoryCard(o){return `<article class="history-card"><div><span>${escapeHtml(o.order_id)}</span><strong>${money(o.total)}</strong></div><p>${escapeHtml(new Date(o.created_at).toLocaleDateString('en-IN'))} • ${escapeHtml(statusLabel(o.status))}</p><button class="primary-btn wide" data-reorder="${o.order_id}">${escapeHtml(t('reorder'))}</button></article>`;}
 async function reorder(orderId){const o=historyCache.find(x=>x.order_id===orderId);if(!o)return;state.cart=[];for(const x of o.items||[]){if(x.isCombo)addPack(x.id,Number(x.qty)||1);else addItem(x.id,Boolean(x.extraCheese),Number(x.qty)||1,x.variantKey||null);}saveCart();openCart();}
@@ -763,6 +761,7 @@ document.addEventListener('click',async e=>{
   if(btn.hasAttribute('data-get-gps')){e.preventDefault();e.stopPropagation();if(btn.disabled)return;getGPS();return;}
   if(btn.hasAttribute('data-location-confirm')){e.preventDefault();e.stopPropagation();confirmLocation();return;}
   if(btn.hasAttribute('data-location-retry')){e.preventDefault();e.stopPropagation();getGPS();return;}
+  if(btn.hasAttribute('data-install-app')){e.preventDefault();e.stopPropagation();installCustomerApp();return;}
   if(btn.hasAttribute('data-view')){const v=btn.dataset.view;if(v==='menu'){state.category=null;state.menuSpecial=null;state.search='';state.filter='all';}setView(v);return;}
   if(btn.hasAttribute('data-category')){state.menuSpecial=null;state.category=btn.dataset.category;state.search='';state.filter='all';renderView();return;}
   if(btn.hasAttribute('data-filter')){state.filter=btn.dataset.filter;renderView(true);return;}
@@ -787,57 +786,60 @@ function notifyToast(msg){let el=document.getElementById('tppToast');if(!el){el=
 function openCartToast(){ /* intentionally no visual page/cart pulse on add; avoids customer-facing flashes */ }
 window.addEventListener('online',()=>document.body.classList.remove('offline'));window.addEventListener('offline',()=>document.body.classList.add('offline'));
 
-function ensureUxStyles(){if(document.getElementById('tpp-v6-ux-styles'))return;const st=document.createElement('style');st.id='tpp-v6-ux-styles';st.textContent=`.ordering-closed-banner{display:flex;gap:14px;align-items:flex-start;margin:12px 0 18px;padding:16px 18px;border:1px solid rgba(255,120,90,.35);background:linear-gradient(145deg,rgba(255,120,90,.12),rgba(255,179,71,.06));border-radius:20px}.ordering-closed-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(255,120,90,.16);font-size:20px;flex:0 0 auto}.ordering-closed-banner strong{font-size:17px}.ordering-closed-banner p{margin:4px 0;color:var(--muted)}.ordering-closed-calls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.ordering-closed-calls a{display:inline-block;padding:8px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);text-decoration:none;font-weight:800;font-size:12px}.gps-btn,.place-btn{pointer-events:auto!important;touch-action:manipulation!important;user-select:none;-webkit-tap-highlight-color:transparent;position:relative;z-index:20}.eta-ring{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box}.eta-ring strong#etaTime{font-size:27px;letter-spacing:.02em;line-height:1;white-space:nowrap;display:block;min-width:74px;text-align:center;font-variant-numeric:tabular-nums}@media(max-width:680px){.ordering-closed-banner{padding:13px}.ordering-closed-banner strong{font-size:15px}}.voice-confirmation-card{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin:14px 0;padding:14px 15px;border:1px solid rgba(255,179,71,.38);border-radius:18px;background:rgba(255,179,71,.07)}.voice-confirmation-card p{margin:0}.voice-confirmation-card .primary-btn{white-space:nowrap}.voice-confirmation-card audio{display:none}@media(max-width:680px){.voice-confirmation-card{grid-template-columns:1fr}.voice-confirmation-card .primary-btn{width:100%}}`;st.textContent += `.combo-day-card{margin:16px 0;border:1px solid rgba(255,179,71,.5);border-radius:22px;padding:14px;background:linear-gradient(135deg,rgba(255,179,71,.11),rgba(255,111,44,.04));box-shadow:0 14px 40px rgba(255,140,40,.08)}.combo-day-badge{font-size:11px;font-weight:900;letter-spacing:.12em;color:#ffb34f;margin-bottom:10px}.combo-day-inner{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center}.combo-day-media img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:16px}.combo-day-copy h2{margin:0 0 6px}.combo-day-copy p{margin:0 0 8px}.combo-day-price{display:flex;align-items:center;gap:8px;margin:10px 0}.combo-day-price del{opacity:.6}.combo-day-price strong{font-size:25px;color:#ffb34f}.combo-day-price span{font-size:11px;color:#86efac}.combo-day-added{padding:10px 12px;border-radius:12px;background:rgba(34,197,94,.12);color:#bbf7d0;font-weight:800}.combo-day-added-button{background:rgba(34,197,94,.16)!important;color:#bbf7d0!important;border-color:rgba(34,197,94,.45)!important}.marketing-combo-day{margin:8px auto 0;text-align:center;padding:8px 12px;border:1px solid rgba(255,179,71,.35);border-radius:999px;max-width:max-content;font-weight:800;color:#ffcf76}.driver-tracking-card{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0;padding:13px;border:1px solid rgba(255,179,71,.35);border-radius:16px;background:rgba(255,179,71,.07)}.driver-tracking-card div{display:grid;gap:3px}.driver-tracking-card strong{font-size:17px}.driver-tracking-card span{font-size:12px;opacity:.75}@media(max-width:680px){.combo-day-inner{grid-template-columns:1fr}.combo-day-media img{max-height:190px}.driver-tracking-card{align-items:flex-start;flex-direction:column}.driver-tracking-card .contact-btn{width:100%;text-align:center}}`;document.head.appendChild(st)}
+function ensureUxStyles(){if(document.getElementById('tpp-v6-ux-styles'))return;const st=document.createElement('style');st.id='tpp-v6-ux-styles';st.textContent=`.ordering-closed-banner{display:flex;gap:14px;align-items:flex-start;margin:12px 0 18px;padding:16px 18px;border:1px solid rgba(255,120,90,.35);background:linear-gradient(145deg,rgba(255,120,90,.12),rgba(255,179,71,.06));border-radius:20px}.ordering-closed-icon{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(255,120,90,.16);font-size:20px;flex:0 0 auto}.ordering-closed-banner strong{font-size:17px}.ordering-closed-banner p{margin:4px 0;color:var(--muted)}.ordering-closed-calls{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.ordering-closed-calls a{display:inline-block;padding:8px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);text-decoration:none;font-weight:800;font-size:12px}.gps-btn,.place-btn{pointer-events:auto!important;touch-action:manipulation!important;user-select:none;-webkit-tap-highlight-color:transparent;position:relative;z-index:20}.eta-ring{overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:center;box-sizing:border-box}.eta-ring strong#etaTime{font-size:27px;letter-spacing:.02em;line-height:1;white-space:nowrap;display:block;min-width:74px;text-align:center;font-variant-numeric:tabular-nums}@media(max-width:680px){.ordering-closed-banner{padding:13px}.ordering-closed-banner strong{font-size:15px}}.voice-confirmation-card{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin:14px 0;padding:14px 15px;border:1px solid rgba(255,179,71,.38);border-radius:18px;background:rgba(255,179,71,.07)}.voice-confirmation-card p{margin:0}.voice-confirmation-card .primary-btn{white-space:nowrap}.voice-confirmation-card audio{display:none}@media(max-width:680px){.voice-confirmation-card{grid-template-columns:1fr}.voice-confirmation-card .primary-btn{width:100%}}`;st.textContent += `.combo-day-card{margin:16px 0;border:1px solid rgba(255,179,71,.5);border-radius:22px;padding:14px;background:linear-gradient(135deg,rgba(255,179,71,.11),rgba(255,111,44,.04));box-shadow:0 14px 40px rgba(255,140,40,.08)}.combo-day-badge{font-size:11px;font-weight:900;letter-spacing:.12em;color:#ffb34f;margin-bottom:10px}.combo-day-inner{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center}.combo-day-media img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:16px}.combo-day-copy h2{margin:0 0 6px}.combo-day-copy p{margin:0 0 8px}.combo-day-price{display:flex;align-items:center;gap:8px;margin:10px 0}.combo-day-price del{opacity:.6}.combo-day-price strong{font-size:25px;color:#ffb34f}.combo-day-price span{font-size:11px;color:#86efac}.combo-day-added{padding:10px 12px;border-radius:12px;background:rgba(34,197,94,.12);color:#bbf7d0;font-weight:800}.combo-day-added-button{background:rgba(34,197,94,.16)!important;color:#bbf7d0!important;border-color:rgba(34,197,94,.45)!important}.marketing-combo-day{margin:8px auto 0;text-align:center;padding:8px 12px;border:1px solid rgba(255,179,71,.35);border-radius:999px;max-width:max-content;font-weight:800;color:#ffcf76}.confirmation-wait-card{display:flex;gap:12px;align-items:center;margin:15px 0;padding:14px 16px;border:1px solid rgba(255,179,71,.45);border-radius:18px;background:rgba(255,179,71,.08)}.confirmation-wait-card p,.confirmation-cancel-card p{margin:3px 0 0}.confirm-pulse{width:42px;height:42px;border-radius:14px;display:grid;place-items:center;background:rgba(255,80,60,.14);animation:tppConfirmPulse 1.1s infinite}.confirmation-cancel-card{margin:15px 0;padding:14px 16px;border:1px solid rgba(239,68,68,.45);border-radius:18px;background:rgba(239,68,68,.08)}@keyframes tppConfirmPulse{50%{transform:scale(1.08)}}.driver-tracking-card{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:14px 0;padding:13px;border:1px solid rgba(255,179,71,.35);border-radius:16px;background:rgba(255,179,71,.07)}.driver-tracking-card div{display:grid;gap:3px}.driver-tracking-card strong{font-size:17px}.driver-tracking-card span{font-size:12px;opacity:.75}@media(max-width:680px){.combo-day-inner{grid-template-columns:1fr}.combo-day-media img{max-height:190px}.driver-tracking-card{align-items:flex-start;flex-direction:column}.driver-tracking-card .contact-btn{width:100%;text-align:center}}`;document.head.appendChild(st)}
 
 
 /* V18 Customer PWA: installable app experience */
+function isCustomerStandalone(){
+  return Boolean(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone===true);
+}
+let customerDeferredInstallPrompt=null;
+function hideCustomerInstallUi(){
+  document.querySelectorAll('#tppInstallAppBtn,[data-install-app].install-inline-btn').forEach(el=>el.remove());
+  const card=document.getElementById('tppInstallCard'); if(card) card.remove();
+  const help=document.getElementById('tppInstallHelp'); if(help) help.remove();
+}
+function customerInstallHelp(){
+  const isIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const msg=isIOS
+    ? 'On iPhone/iPad: tap Share → Add to Home Screen, then tap Add.'
+    : 'On Android Chrome: tap ⋮ → Install app or Add to Home screen. If Install app is shown, choose it. If only Add to Home screen is shown, choose that.';
+  const existing=document.getElementById('tppInstallHelp'); if(existing)existing.remove();
+  const box=document.createElement('div'); box.id='tppInstallHelp';
+  box.style.cssText='position:fixed;left:12px;right:12px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:10020;background:#1b1511;color:#fff3df;border:1px solid rgba(255,179,71,.55);border-radius:18px;padding:17px;box-shadow:0 18px 55px rgba(0,0,0,.45);font:600 14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif';
+  box.innerHTML=`<b>Install Town Pizza Planet</b><br><br>${msg}<br><br><button type="button" style="padding:9px 13px;border-radius:10px;border:0;background:#ff9a3d;color:#20140e;font-weight:900" onclick="this.parentElement.remove()">Got it</button>`;
+  document.body.appendChild(box);
+}
+async function installCustomerApp(){
+  if(customerDeferredInstallPrompt){
+    const promptEvent=customerDeferredInstallPrompt; customerDeferredInstallPrompt=null;
+    try{ await promptEvent.prompt(); await promptEvent.userChoice; }catch{}
+    return;
+  }
+  customerInstallHelp();
+}
+function installCardHtml(){
+  if(isCustomerStandalone())return '';
+  return `<section class="install-app-card" id="tppInstallCard"><div class="install-app-icon">📲</div><div class="install-app-copy"><p class="eyebrow">ORDER FASTER NEXT TIME</p><h3>Install Town Pizza Planet</h3><p>Add the ordering app to your phone home screen for one-tap access.</p></div><button class="primary-btn install-inline-btn" data-install-app>Install App</button></section>`;
+}
 function setupCustomerPWA(){
   try{
-    if(!document.querySelector('link[rel="manifest"]')){
-      const link=document.createElement('link');
-      link.rel='manifest';
-      link.href='/order/manifest.webmanifest';
-      document.head.appendChild(link);
-    }
+    const standalone=isCustomerStandalone();
+    const link=document.querySelector('link[rel="manifest"]')||(()=>{const l=document.createElement('link');l.rel='manifest';document.head.appendChild(l);return l;})();
+    link.href='/order/manifest.webmanifest';
     const addMeta=(name,content)=>{if(!document.querySelector(`meta[name="${name}"]`)){const m=document.createElement('meta');m.name=name;m.content=content;document.head.appendChild(m);}};
-    addMeta('mobile-web-app-capable','yes');
-    addMeta('apple-mobile-web-app-capable','yes');
-    addMeta('apple-mobile-web-app-status-bar-style','black-translucent');
-    addMeta('apple-mobile-web-app-title','Town Pizza Planet');
-
-    const standalone=window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone===true;
-    if(!standalone && !document.getElementById('tppInstallAppBtn')){
-      const style=document.createElement('style');
-      style.id='tpp-pwa-install-style';
-      style.textContent=`#tppInstallAppBtn{position:fixed;right:14px;bottom:calc(88px + env(safe-area-inset-bottom));z-index:9998;display:none;align-items:center;gap:8px;padding:11px 15px;border:1px solid rgba(255,179,71,.45);border-radius:999px;background:rgba(28,22,18,.96);color:#fff3df;box-shadow:0 10px 30px rgba(0,0,0,.28);font:800 13px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);cursor:pointer}#tppInstallAppBtn.show{display:flex}@media(min-width:681px){#tppInstallAppBtn{bottom:24px}}`;
+    addMeta('mobile-web-app-capable','yes');addMeta('apple-mobile-web-app-capable','yes');addMeta('apple-mobile-web-app-status-bar-style','black-translucent');addMeta('apple-mobile-web-app-title','Town Pizza Planet');
+    const st=document.getElementById('tpp-pwa-install-style');
+    if(!st){const style=document.createElement('style');style.id='tpp-pwa-install-style';style.textContent=`#tppInstallAppBtn{position:fixed;left:14px;bottom:calc(92px + env(safe-area-inset-bottom));z-index:9998;display:flex;align-items:center;gap:8px;padding:11px 15px;border:1px solid rgba(255,179,71,.55);border-radius:999px;background:rgba(28,22,18,.97);color:#fff3df;box-shadow:0 10px 30px rgba(0,0,0,.28);font:800 13px/1.1 system-ui,-apple-system,Segoe UI,sans-serif;backdrop-filter:blur(12px);cursor:pointer}.install-app-card{display:grid;grid-template-columns:auto 1fr auto;gap:13px;align-items:center;margin:16px 0;padding:16px;border:1px solid rgba(255,179,71,.42);border-radius:20px;background:linear-gradient(135deg,rgba(255,179,71,.12),rgba(255,255,255,.03));box-shadow:0 10px 30px rgba(0,0,0,.08)}.install-app-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;background:rgba(255,179,71,.16);font-size:24px}.install-app-copy h3{margin:0 0 4px;font-size:18px}.install-app-copy p{margin:0}.install-inline-btn{white-space:nowrap}.install-app-card{color:var(--text)}@media(max-width:680px){.install-app-card{grid-template-columns:auto 1fr}.install-inline-btn{grid-column:1 / -1;width:100%}}@media(min-width:681px){#tppInstallAppBtn{bottom:24px}}`;
       document.head.appendChild(style);
-      const btn=document.createElement('button');
-      btn.id='tppInstallAppBtn';
-      btn.type='button';
-      btn.setAttribute('aria-label','Install Town Pizza Planet');
-      btn.innerHTML='<span>📲</span><span>Install Customer App</span>';
-      document.body.appendChild(btn);
-      let deferredPrompt=null;
-      window.addEventListener('beforeinstallprompt',e=>{
-        e.preventDefault();
-        deferredPrompt=e;
-        btn.classList.add('show');
-      });
-      btn.addEventListener('click',async()=>{
-        if(!deferredPrompt)return;
-        deferredPrompt.prompt();
-        try{await deferredPrompt.userChoice;}catch{}
-        deferredPrompt=null;
-        btn.classList.remove('show');
-      });
-      window.addEventListener('appinstalled',()=>{deferredPrompt=null;btn.classList.remove('show');});
     }
-
-    if('serviceWorker' in navigator){
-      window.addEventListener('load',()=>{
-        navigator.serviceWorker.register('/order/sw.js',{scope:'/order/'}).catch(err=>console.warn('PWA service worker registration failed:',err));
-      });
+    if(standalone){hideCustomerInstallUi();}
+    window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();customerDeferredInstallPrompt=e;const b=document.getElementById('tppInstallAppBtn');if(b)b.dataset.ready='true';});
+    window.addEventListener('appinstalled',()=>{customerDeferredInstallPrompt=null;hideCustomerInstallUi();});
+    if(!standalone&&!document.getElementById('tppInstallAppBtn')){
+      const btn=document.createElement('button');btn.id='tppInstallAppBtn';btn.type='button';btn.setAttribute('aria-label','Install Town Pizza Planet');btn.innerHTML='<span>📲</span><span>Install App</span>';btn.addEventListener('click',installCustomerApp);document.body.appendChild(btn);
     }
+    if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('/order/sw.js',{scope:'/order/'}).catch(err=>console.warn('PWA service worker registration failed:',err)));
   }catch(err){console.warn('Customer PWA setup failed:',err);}
 }
 setupCustomerPWA();

@@ -17,6 +17,7 @@ const { categories, bestsellers } = require('../data/menu');
 const { combos } = require('../data/combos');
 const { familyPacks } = require('../data/familyPacks');
 const { getCatalog } = require('../web/orderData');
+const { ensureVapid, saveSubscription, removeSubscription, testPush, acknowledgeOrder, alertView } = require('../ownerAlerts');
 const {
   initAdminStore,
   getState,
@@ -40,6 +41,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'change-me-now';
 app.disable('x-powered-by');
 app.use(express.json({ limit: '12mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/admin-manifest.webmanifest',(req,res)=>res.sendFile(path.join(__dirname,'public','admin-manifest.webmanifest')));
+app.get('/admin-sw.js',(req,res)=>{res.setHeader('Service-Worker-Allowed','/admin/');res.sendFile(path.join(__dirname,'public','admin-sw.js'));});
 app.use('/order', express.static(path.join(process.cwd(), 'public', 'order')));
 app.use('/product-images', express.static(path.join(process.cwd(), 'public', 'product-images')));
 app.use('/combo-images', express.static(path.join(process.cwd(), 'public', 'combo-images')));
@@ -218,12 +221,19 @@ app.get('/api/dashboard', requireAuth, async (req,res)=>{
   res.json({success:true,stats,orders:today.slice(0,80),trend,topItems:Object.values(topItems).sort((a,b)=>b.qty-a.qty).slice(0,10),overview:overview(today),system:{database:require('../db/database').getDatabaseMode(),whatsapp:global.__TPP_WHATSAPP_READY===true,uptime:process.uptime(),memory:process.memoryUsage().rss}});
 });
 
+app.get('/api/push/public-key', requireAuth, async (req,res)=>{try{const v=await ensureVapid();res.json({success:true,publicKey:v.vapidPublicKey})}catch(e){res.status(500).json({success:false,error:e.message||'Push unavailable'})}});
+app.post('/api/push/subscribe', requireAuth, async (req,res)=>{try{await saveSubscription(req.body?.subscription||req.body);res.json({success:true})}catch(e){res.status(400).json({success:false,error:e.message||'Invalid subscription'})}});
+app.delete('/api/push/subscribe', requireAuth, async (req,res)=>{try{await removeSubscription(String(req.body?.endpoint||''));res.json({success:true})}catch(e){res.status(400).json({success:false,error:e.message||'Could not remove subscription'})}});
+app.post('/api/push/test', requireAuth, async (req,res)=>{try{const sent=await testPush();res.json({success:true,sent})}catch(e){res.status(500).json({success:false,error:e.message||'Push test failed'})}});
+app.get('/api/owner-alerts/pending', requireAuth, async (req,res)=>{try{await require('../ownerAlerts').expirePendingOrders();const list=getAllOrders().filter(o=>o.status==='received').map(o=>({order:o,alert:alertView(o)})).filter(x=>x.alert.pending);res.json({success:true,alerts:list})}catch(e){res.status(500).json({success:false,error:e.message||'Could not load alerts'})}});
+app.post('/api/owner-alerts/:orderId/ack', requireAuth, async (req,res)=>{try{const result=await acknowledgeOrder(req.params.orderId);res.json({success:true,...result})}catch(e){res.status(400).json({success:false,error:e.message||'Could not acknowledge order'})}});
 app.get('/api/orders/today', requireAuth, (req,res)=>res.json({success:true,orders:getTodayOrders().map(decorateOrder)}));
 app.get('/api/orders', requireAuth, async (req,res)=>{const list=filteredOrders(req.query);for(const o of list) await ensureDriverAssignment(o);res.json({success:true,orders:list.map(o=>decorateOrder(o))});});
 app.get('/api/orders/:orderId', requireAuth, (req,res)=>{const order=getOrder(req.params.orderId);if(!order)return res.status(404).json({success:false,error:'Order not found'});res.json({success:true,order});});
 app.put('/api/orders/:orderId/status', requireAuth, async (req,res)=>{
   const valid=['received','preparing','ready','out_for_delivery','delivered','cancelled']; const status=String(req.body?.status||''); if(!valid.includes(status))return res.status(400).json({success:false,error:'Invalid status'});
   const order=await updateOrderStatus(req.params.orderId,status); if(!order)return res.status(404).json({success:false,error:'Order not found'});
+  if(status!=='received'){ try{await acknowledgeOrder(order.order_id);}catch{} }
   await appendAudit('order.status_changed',{orderId:order.order_id,status});
   const tpl=getSettings().messageTemplates?.[status]; const message=tpl?renderTemplate(tpl,order):(global.__TPP_STATUS_MESSAGE?global.__TPP_STATUS_MESSAGE(status,order.order_id,order.language||'en'):null);
   if(whatsappClient && order.user_id && message) void sendStatusNotificationSafe(whatsappClient,order.user_id,message);
@@ -274,7 +284,7 @@ app.put('/api/orders/:orderId/edit', requireAuth, async (req,res)=>{
   await updateState(s=>{s.orderMeta[o.order_id]={...(s.orderMeta[o.order_id]||{}),edits:{...(s.orderMeta[o.order_id]?.edits||{}),...edits},updatedAt:new Date().toISOString()};return s;});
   await appendAudit('order.edited',{orderId:o.order_id});res.json({success:true,order:getOrder(o.order_id)});
 });
-app.post('/api/orders/:orderId/resend', requireAuth, async (req,res)=>{const o=getOrder(req.params.orderId);if(!o)return res.status(404).json({success:false,error:'Order not found'});const owner=digits(process.env.OWNER_PHONE);if(!whatsappClient||!owner)return res.status(503).json({success:false,error:'WhatsApp owner notification is not available.'});const ok=await sendStatusNotificationSafe(whatsappClient,`${owner}@c.us`,buildNewOrderMessage(o));await appendAudit('order.notification_resent',{orderId:o.order_id,ok});res.json({success:ok});});
+app.post('/api/orders/:orderId/resend', requireAuth, async (req,res)=>{const o=getOrder(req.params.orderId);if(!o)return res.status(404).json({success:false,error:'Order not found'});try{const sent=await require('../ownerAlerts').createOrderAlert(o);await appendAudit('order.alert_resent',{orderId:o.order_id,sent});res.json({success:true,sent:sent||0});}catch(e){await appendError(e.message,{route:'/api/orders/:orderId/resend'});res.status(503).json({success:false,error:e.message||'Could not resend owner alert.'});}});
 
 app.get('/api/search', requireAuth, (req,res)=>{const q=String(req.query.q||'').trim().toLowerCase();if(!q)return res.json({success:true,results:[]});const out=[];for(const o of allOrders()){const hay=`${o.order_id||''} ${o.user_name||''} ${o.user_id||''} ${o.phone||''} ${o.address||''} ${o.delivery_zone||''}`.toLowerCase();if(hay.includes(q))out.push({type:'order',id:o.order_id,title:`Order ${o.order_id}`,subtitle:`${o.user_name||'Customer'} · ${formatMoney(o.total)}`,status:o.status});}const cat=getCatalog();for(const c of cat.categories||[]){for(const i of c.items||[]){const hay=`${i.id} ${i.name} ${c.name||''}`.toLowerCase();if(hay.includes(q))out.push({type:'menu',id:i.id,title:i.name,subtitle:`${formatMoney(i.price)} · ${c.name||''}`,available:i.available!==false});}}for(const p of [...(cat.combos||[]),...(cat.familyPacks||[])]){const hay=`${p.id} ${p.name} ${p.description||''}`.toLowerCase();if(hay.includes(q))out.push({type:'pack',id:p.id,title:p.name,subtitle:`${formatMoney(p.price)}`,available:p.available!==false});}const seen=new Set();res.json({success:true,results:out.filter(x=>{const k=x.type+':'+x.id;if(seen.has(k))return false;seen.add(k);return true}).slice(0,50)});});
 
@@ -491,17 +501,6 @@ app.get('/api/export/expenses', requireAuth,(req,res)=>{sendCsv(res,'expenses.cs
 app.post('/api/upload-image', requireAuth, async(req,res)=>{try{const b=req.body||{};const name=String(b.name||'').replace(/[^a-zA-Z0-9._-]/g,'_');const mime=String(b.mime||'');const data=String(b.data||'');if(!name||!/^data:image\/(jpeg|png|webp);base64,/i.test(data))return res.status(400).json({success:false,error:'Upload a JPEG, PNG or WebP image.'});const ext=mime.includes('png')?'.png':mime.includes('webp')?'.webp':'.jpg';const base=path.basename(name).replace(/\.[^.]+$/,'');const final=`${base}-${Date.now()}${ext}`;const dir=path.join(process.cwd(),'public','uploads');fs.mkdirSync(dir,{recursive:true});fs.writeFileSync(path.join(dir,final),Buffer.from(data.split(',')[1],'base64'));await appendAudit('image.uploaded',{name:final});res.json({success:true,path:`/uploads/${final}`});}catch(err){await appendError(err.message,{route:'/api/upload-image'});res.status(500).json({success:false,error:'Image upload failed'});}});
 app.get('/api/images', requireAuth,(req,res)=>{const dir=path.join(process.cwd(),'public','uploads');fs.mkdirSync(dir,{recursive:true});const files=fs.readdirSync(dir).filter(f=>/\.(jpe?g|png|webp)$/i.test(f)).map(f=>({name:f,path:`/uploads/${f}`,size:fs.statSync(path.join(dir,f)).size}));res.json({success:true,images:files});});
 app.delete('/api/images/:name', requireAuth, async(req,res)=>{const name=path.basename(req.params.name);const file=path.join(process.cwd(),'public','uploads',name);if(fs.existsSync(file))fs.unlinkSync(file);await appendAudit('image.deleted',{name});res.json({success:true});});
-
-app.post('/api/whatsapp/reset', requireAuth, async(req,res)=>{
-  try {
-    const { resetWhatsAppAuth } = require('../bot');
-    const ok = await resetWhatsAppAuth();
-    res.json({success:Boolean(ok),status:global.__TPP_WHATSAPP_STATUS||'starting'});
-  } catch(err) {
-    await appendError(err.message,{route:'/api/whatsapp/reset'});
-    res.status(500).json({success:false,error:'Could not reset WhatsApp session.'});
-  }
-});
 
 app.post('/api/daily-summary', requireAuth, async(req,res)=>{const date=String(req.body?.date||isoDay());const list=allOrders().filter(o=>isoDay(o.created_at)===date);const sales=list.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+safeNumber(o.total),0);const top={};list.forEach(o=>(o.items||[]).forEach(i=>{top[i.name]=(top[i.name]||0)+safeNumber(i.qty);}));const topItem=Object.entries(top).sort((a,b)=>b[1]-a[1])[0]?.[0]||'—';const tpl=getState().messageTemplates?.daily_summary||'📊 Daily Summary\\nOrders: {orders}\\nSales: ₹{sales}\\nTop item: {top_item}';const msg=tpl.replaceAll('{orders}',String(list.length)).replaceAll('{sales}',String(sales)).replaceAll('{top_item}',topItem);const owner=digits(process.env.OWNER_PHONE);const ok=Boolean(whatsappClient&&owner)?await sendStatusNotificationSafe(whatsappClient,`${owner}@c.us`,msg):false;res.json({success:true,sent:ok,message:msg});});
 

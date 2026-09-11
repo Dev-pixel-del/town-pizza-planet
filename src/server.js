@@ -3,7 +3,8 @@ require('dns').setServers(['1.1.1.1']);
 require('dotenv').config();
 const { app, setWhatsAppClient, initAdminStore } = require('./admin/server');
 const { initDatabase } = require('./db/database');
-const { startWhatsApp, shutdown } = require('./bot');
+const { shutdown } = require('./bot');
+const { initOwnerAlerts } = require('./ownerAlerts');
 const { statusMessage } = require('./utils/formatter');
 
 const PORT = Number(process.env.PORT || process.env.ADMIN_PORT || 3000);
@@ -15,14 +16,15 @@ global.__TPP_STATUS_MESSAGE = statusMessage;
   try {
     await initDatabase();
     await initAdminStore();
+    await initOwnerAlerts();
 
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`🌐 Town Pizza Planet web server listening on port ${PORT}`);
       console.log(`❤️ Health: /healthz`);
     });
 
-    const client = await startWhatsApp();
-    setWhatsAppClient(client);
+    // WhatsApp Web is intentionally not started on Render.
+    // Customer orders use the owner PWA alert system instead.
   } catch (err) {
     console.error('❌ Startup failed:', err);
     process.exit(1);

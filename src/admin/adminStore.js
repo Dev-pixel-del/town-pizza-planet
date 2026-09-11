@@ -63,6 +63,8 @@ function defaultState() {
     translations: {},
     messageTemplates: { ...DEFAULT_TEMPLATES },
     orderMeta: {},
+    pushSubscriptions: [],
+    pushConfig: { vapidPublicKey: '', vapidPrivateKey: '', subject: 'mailto:owner@townpizzaplanet.local' },
     auditLog: [],
     errorLog: [],
     lastDailySummaryDate: null,
@@ -93,6 +95,8 @@ function mergeDefaults(input) {
   out.auditLog = Array.isArray(input.auditLog) ? input.auditLog : [];
   out.errorLog = Array.isArray(input.errorLog) ? input.errorLog : [];
   out.orderMeta = input.orderMeta && typeof input.orderMeta === 'object' ? input.orderMeta : {};
+  out.pushSubscriptions = Array.isArray(input.pushSubscriptions) ? input.pushSubscriptions : [];
+  out.pushConfig = { ...base.pushConfig, ...(input.pushConfig || {}) };
   out.menuOverrides = input.menuOverrides && typeof input.menuOverrides === 'object' ? input.menuOverrides : {};
   out.customItems = Array.isArray(input.customItems) ? input.customItems : [];
   out.customCategories = Array.isArray(input.customCategories) ? input.customCategories : [];
