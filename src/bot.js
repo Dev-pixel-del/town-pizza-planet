@@ -107,6 +107,57 @@ function toBufferDeep(value) {
   return out;
 }
 
+
+function decodeBinaryString(value) {
+  if (typeof value !== 'string' || !value) return value;
+  // Most persisted key material is base64. Decode only when it is plausibly
+  // binary key material; leave ordinary strings alone.
+  const compact = value.replace(/\s+/g, '');
+  const looksBase64 = compact.length >= 16 && compact.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(compact);
+  if (looksBase64) {
+    try {
+      const decoded = Buffer.from(compact, 'base64');
+      if (decoded.length >= 8) return decoded;
+    } catch {}
+  }
+  const looksHex = compact.length >= 16 && compact.length % 2 === 0 && /^[0-9a-fA-F]+$/.test(compact);
+  if (looksHex) {
+    try {
+      const decoded = Buffer.from(compact, 'hex');
+      if (decoded.length >= 8) return decoded;
+    } catch {}
+  }
+  return value;
+}
+
+function normalizeCredsBinary(creds) {
+  const out = toBufferDeep(creds || {});
+  const directPairs = [
+    ['noiseKey', 'private'], ['noiseKey', 'public'],
+    ['pairingEphemeralKeyPair', 'private'], ['pairingEphemeralKeyPair', 'public'],
+    ['signedIdentityKey', 'private'], ['signedIdentityKey', 'public'],
+    ['signedPreKey', 'signature'],
+  ];
+  for (const [parent, child] of directPairs) {
+    if (typeof out?.[parent]?.[child] === 'string') out[parent][child] = decodeBinaryString(out[parent][child]);
+  }
+  if (typeof out?.signedPreKey?.keyPair?.private === 'string') out.signedPreKey.keyPair.private = decodeBinaryString(out.signedPreKey.keyPair.private);
+  if (typeof out?.signedPreKey?.keyPair?.public === 'string') out.signedPreKey.keyPair.public = decodeBinaryString(out.signedPreKey.keyPair.public);
+  if (typeof out?.identityId === 'string') out.identityId = decodeBinaryString(out.identityId);
+  if (typeof out?.backupToken === 'string') out.backupToken = decodeBinaryString(out.backupToken);
+  return out;
+}
+
+function credsHaveUsablePrivateKeys(creds) {
+  const checks = [
+    creds?.noiseKey?.private,
+    creds?.signedIdentityKey?.private,
+    creds?.signedPreKey?.keyPair?.private,
+    creds?.pairingEphemeralKeyPair?.private,
+  ];
+  return checks.every(v => Buffer.isBuffer(v) || v instanceof Uint8Array);
+}
+
 function serializeForMongo(value) {
   const { BufferJSON } = require('@whiskeysockets/baileys');
   return JSON.parse(JSON.stringify(value, BufferJSON.replacer));
@@ -178,7 +229,15 @@ async function openMongoAuth() {
   };
 
   const savedCreds = await readData('auth_creds');
-  const creds = reviveFromMongo(savedCreds?.creds) || initAuthCreds();
+  let creds = normalizeCredsBinary(reviveFromMongo(savedCreds?.creds) || initAuthCreds());
+
+  // Earlier auth versions could persist key bytes as strings. Do not let a
+  // malformed/legacy state reach libsignal: start a clean QR session instead.
+  if (savedCreds?.creds && !credsHaveUsablePrivateKeys(creds)) {
+    console.warn('⚠️ Stored WhatsApp auth state has invalid private-key types. Clearing WhatsApp auth state and starting a fresh QR session.');
+    await collection.deleteMany({});
+    creds = initAuthCreds();
+  }
   const state = {
     creds,
     keys: {

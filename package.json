@@ -1,6 +1,6 @@
 {
   "name": "town-pizza-planet",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "description": "Town Pizza Planet WhatsApp ordering bot with MongoDB persistence and restaurant dashboard",
   "main": "src/server.js",
