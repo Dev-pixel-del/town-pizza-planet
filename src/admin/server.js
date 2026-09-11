@@ -43,6 +43,7 @@ app.use(express.json({ limit: '12mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.get('/admin-manifest.webmanifest',(req,res)=>res.sendFile(path.join(__dirname,'public','admin-manifest.webmanifest')));
 app.get('/admin-sw.js',(req,res)=>{res.setHeader('Service-Worker-Allowed','/admin/');res.sendFile(path.join(__dirname,'public','admin-sw.js'));});
+app.get('/admin/alerts',(req,res)=>res.sendFile(path.join(__dirname,'public','alerts.html')));
 app.use('/order', express.static(path.join(process.cwd(), 'public', 'order')));
 app.use('/product-images', express.static(path.join(process.cwd(), 'public', 'product-images')));
 app.use('/combo-images', express.static(path.join(process.cwd(), 'public', 'combo-images')));
@@ -97,6 +98,7 @@ function decorateOrder(order) {
     cashReceived: safeNumber(meta.cashReceived),
     updatedAt: meta.updatedAt || null,
   };
+  out.confirmation = alertView(order);
   return out;
 }
 function getOrder(id) { const o = getOrderById(id); return o ? decorateOrder(o) : null; }
@@ -222,6 +224,7 @@ app.get('/api/dashboard', requireAuth, async (req,res)=>{
 });
 
 app.get('/api/push/public-key', requireAuth, async (req,res)=>{try{const v=await ensureVapid();res.json({success:true,publicKey:v.vapidPublicKey})}catch(e){res.status(500).json({success:false,error:e.message||'Push unavailable'})}});
+app.get('/api/push/status', requireAuth, async (req,res)=>{try{await ensureVapid();const subs=getState().pushSubscriptions||[];res.json({success:true,deviceCount:subs.length,vapidReady:true})}catch(e){res.status(500).json({success:false,error:e.message||'Push unavailable'})}});
 app.post('/api/push/subscribe', requireAuth, async (req,res)=>{try{await saveSubscription(req.body?.subscription||req.body);res.json({success:true})}catch(e){res.status(400).json({success:false,error:e.message||'Invalid subscription'})}});
 app.delete('/api/push/subscribe', requireAuth, async (req,res)=>{try{await removeSubscription(String(req.body?.endpoint||''));res.json({success:true})}catch(e){res.status(400).json({success:false,error:e.message||'Could not remove subscription'})}});
 app.post('/api/push/test', requireAuth, async (req,res)=>{try{const sent=await testPush();res.json({success:true,sent})}catch(e){res.status(500).json({success:false,error:e.message||'Push test failed'})}});
@@ -231,13 +234,44 @@ app.get('/api/orders/today', requireAuth, (req,res)=>res.json({success:true,orde
 app.get('/api/orders', requireAuth, async (req,res)=>{const list=filteredOrders(req.query);for(const o of list) await ensureDriverAssignment(o);res.json({success:true,orders:list.map(o=>decorateOrder(o))});});
 app.get('/api/orders/:orderId', requireAuth, (req,res)=>{const order=getOrder(req.params.orderId);if(!order)return res.status(404).json({success:false,error:'Order not found'});res.json({success:true,order});});
 app.put('/api/orders/:orderId/status', requireAuth, async (req,res)=>{
-  const valid=['received','preparing','ready','out_for_delivery','delivered','cancelled']; const status=String(req.body?.status||''); if(!valid.includes(status))return res.status(400).json({success:false,error:'Invalid status'});
-  const order=await updateOrderStatus(req.params.orderId,status); if(!order)return res.status(404).json({success:false,error:'Order not found'});
-  if(status!=='received'){ try{await acknowledgeOrder(order.order_id);}catch{} }
-  await appendAudit('order.status_changed',{orderId:order.order_id,status});
-  const tpl=getSettings().messageTemplates?.[status]; const message=tpl?renderTemplate(tpl,order):(global.__TPP_STATUS_MESSAGE?global.__TPP_STATUS_MESSAGE(status,order.order_id,order.language||'en'):null);
-  if(whatsappClient && order.user_id && message) void sendStatusNotificationSafe(whatsappClient,order.user_id,message);
-  res.json({success:true,order:decorateOrder(order)});
+  const valid=['received','preparing','ready','out_for_delivery','delivered','cancelled'];
+  const status=String(req.body?.status||'');
+  if(!valid.includes(status))return res.status(400).json({success:false,error:'Invalid status'});
+
+  const previous=getOrderById(req.params.orderId);
+  if(!previous)return res.status(404).json({success:false,error:'Order not found'});
+
+  // The restaurant owner must explicitly acknowledge a new web order from
+  // the alarm before staff can move it beyond "received".
+  if(previous.status==='received' && status!=='received'){
+    const alert=(getOrderMeta(previous.order_id)||{}).ownerAlert||{};
+    if(alert.state!=='acknowledged'){
+      return res.status(409).json({
+        success:false,
+        code:'OWNER_CONFIRMATION_REQUIRED',
+        error:'Confirm this new order from the Order Alert before changing its status.'
+      });
+    }
+  }
+
+  // Saving an order without actually changing its status is a no-op. This
+  // prevents duplicate customer announcements from ordinary admin edits.
+  if(previous.status===status){
+    return res.json({success:true,changed:false,order:decorateOrder(previous)});
+  }
+
+  const order=await updateOrderStatus(req.params.orderId,status);
+  if(!order)return res.status(404).json({success:false,error:'Order not found'});
+  await appendAudit('order.status_changed',{orderId:order.order_id,from:previous.status,to:status});
+
+  // Web customers are notified only by the explicit owner-confirmation gate
+  // exposed through the alert system. Do not announce routine web status changes.
+  const tpl=getSettings().messageTemplates?.[status];
+  const message=tpl?renderTemplate(tpl,order):(global.__TPP_STATUS_MESSAGE?global.__TPP_STATUS_MESSAGE(status,order.order_id,order.language||'en'):null);
+  if(order.source!=='web' && whatsappClient && order.user_id && message){
+    void sendStatusNotificationSafe(whatsappClient,order.user_id,message);
+  }
+  res.json({success:true,changed:true,order:decorateOrder(order)});
 });
 app.put('/api/orders/:orderId/meta', requireAuth, async (req,res)=>{
   const o=getOrderById(req.params.orderId);if(!o)return res.status(404).json({success:false,error:'Order not found'});

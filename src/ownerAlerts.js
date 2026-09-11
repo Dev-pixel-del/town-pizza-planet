@@ -93,8 +93,10 @@ function alertView(order) {
     createdAt: a.createdAt || null,
     deadlineAt: a.deadlineAt || null,
     acknowledgedAt: a.acknowledgedAt || null,
+    confirmedAt: a.confirmedAt || a.acknowledgedAt || null,
     cancellationReason: a.cancellationReason || null,
     pending: a.state === 'pending' && order.status === 'received',
+    confirmed: a.state === 'acknowledged',
   };
 }
 
@@ -170,9 +172,10 @@ async function acknowledgeOrder(orderId) {
     await expirePendingOrders();
     return { ok:false, expired:true };
   }
-  await setAlert(orderId, { state:'acknowledged', acknowledgedAt:new Date().toISOString() });
-  await appendAudit('order.owner_alert_acknowledged', { orderId }, 'admin');
-  return { ok:true, expired:false };
+  const confirmedAt = new Date().toISOString();
+  await setAlert(orderId, { state:'acknowledged', acknowledgedAt:confirmedAt, confirmedAt });
+  await appendAudit('order.owner_alert_acknowledged', { orderId, confirmedAt }, 'admin');
+  return { ok:true, expired:false, confirmedAt };
 }
 
 async function saveSubscription(subscription) {
