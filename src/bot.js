@@ -17,6 +17,8 @@ let manualStop = false;
 let initializing = false;
 let resetting = false;
 
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const USE_LOCAL_AUTH = String(process.env.LOCAL_AUTH || '').toLowerCase() === 'true';
 const STORE_NAME = process.env.STORE_NAME || 'Town Pizza Planet';
 const ORDER_URL = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet-1.onrender.com').replace(/\/$/, '');
 const OWNER_PHONE = String(process.env.OWNER_PHONE || '').replace(/\D/g, '');
