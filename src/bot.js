@@ -23,6 +23,19 @@ const STORE_NAME = process.env.STORE_NAME || 'Town Pizza Planet';
 const OWNER_PHONE = String(process.env.OWNER_PHONE || '').replace(/\D/g, '');
 const ORDER_URL = (process.env.PUBLIC_ORDER_URL || process.env.RENDER_EXTERNAL_URL || 'https://town-pizza-planet-1.onrender.com').replace(/\/$/, '');
 const MONGODB_URI = process.env.MONGODB_URI || '';
+const AUTH_DB_NAME = process.env.WHATSAPP_AUTH_DB || 'town_pizza_planet';
+const AUTH_COLLECTION_NAME = process.env.WHATSAPP_AUTH_COLLECTION || 'whatsapp_auth';
+
+function disconnectDetails(lastDisconnect) {
+  const err = lastDisconnect?.error;
+  return {
+    name: err?.name || null,
+    message: err?.message || null,
+    stack: err?.stack || null,
+    statusCode: err?.output?.statusCode ?? err?.statusCode ?? null,
+    data: err?.data ?? null,
+  };
+}
 
 function normalizeJid(jid) {
   const raw = String(jid || '').trim();
@@ -80,8 +93,8 @@ async function openMongoAuth() {
     await mongo.connect();
   }
 
-  const db = mongo.db('town_pizza_planet');
-  const collection = db.collection('whatsapp_auth');
+  const db = mongo.db(AUTH_DB_NAME);
+  const collection = db.collection(AUTH_COLLECTION_NAME);
   return useMongoDBAuthState(collection);
 }
 
@@ -125,6 +138,7 @@ async function connectWhatsApp() {
           errorCorrectionLevel: 'H',
         });
         whatsappState.qrDataUrl = global.__TPP_QR_DATA_URL;
+        whatsappState.lastDisconnect = null;
         whatsappState.qrCreatedAt = Date.now();
         whatsappState.status = 'awaiting_qr';
         console.log('📱 WhatsApp QR ready. Open /qr on the restaurant device to scan.');
@@ -142,6 +156,7 @@ async function connectWhatsApp() {
       whatsappState.status = 'ready';
       whatsappState.qrDataUrl = null;
       whatsappState.qrCreatedAt = 0;
+      whatsappState.lastDisconnect = null;
       const me = socket.user?.id || 'unknown';
       console.log(`✅ ${STORE_NAME} WhatsApp bot is LIVE as ${me}`);
     }
@@ -149,36 +164,47 @@ async function connectWhatsApp() {
     if (connection === 'close') {
       global.__TPP_WHATSAPP_READY = false;
       const code = lastDisconnect?.error?.output?.statusCode ?? lastDisconnect?.error?.statusCode ?? 0;
+      const details = disconnectDetails(lastDisconnect);
       const loggedOut = code === DisconnectReason.loggedOut;
-      global.__TPP_WHATSAPP_STATUS = loggedOut ? 'logged_out' : 'disconnected';
+      const restartRequired = code === DisconnectReason.restartRequired;
+      const badSession = code === DisconnectReason.badSession;
+      global.__TPP_WHATSAPP_STATUS = loggedOut ? 'logged_out' : (badSession ? 'bad_session' : 'disconnected');
       whatsappState.ready = false;
       whatsappState.status = global.__TPP_WHATSAPP_STATUS;
-      // Keep the last QR briefly so the QR endpoint remains useful across
-      // transient connection events; the endpoint marks it stale after 90s.
-      if (loggedOut) { whatsappState.qrDataUrl = null; whatsappState.qrCreatedAt = 0; }
-      console.error(`⚠️ WhatsApp connection closed. code=${code || 'unknown'}${loggedOut ? ' (logged out)' : ''}`);
+      whatsappState.lastDisconnect = { code: code || null, ...details, at: Date.now() };
+      if (loggedOut || badSession) { whatsappState.qrDataUrl = null; whatsappState.qrCreatedAt = 0; }
+      console.error('⚠️ WhatsApp connection closed:', JSON.stringify({code: code || 'unknown', loggedOut, restartRequired, badSession, ...details}));
 
-      if (manualStop || loggedOut) {
-        if (loggedOut) console.log('🔒 WhatsApp logged out. A new QR scan is required.');
+      if (manualStop) return;
+
+      // QR is required again after an explicit logout or invalid auth state.
+      // The safe reset action in admin/server.js clears auth and calls start again.
+      if (loggedOut || badSession) {
+        global.__TPP_WHATSAPP_STATUS = loggedOut ? 'logged_out' : 'bad_session';
+        whatsappState.status = global.__TPP_WHATSAPP_STATUS;
         return;
       }
 
-      if (!reconnectTimer && reconnectAttempts < 5) {
+      if (!reconnectTimer && reconnectAttempts < 8) {
         reconnectAttempts += 1;
+        const delay = restartRequired ? 1000 : Math.min(30000, 3000 * reconnectAttempts);
         reconnectTimer = setTimeout(async () => {
           reconnectTimer = null;
           if (manualStop) return;
           try {
             global.__TPP_WHATSAPP_STATUS = 'reconnecting';
+            whatsappState.status = 'reconnecting';
             await connectWhatsApp();
           } catch (err) {
             global.__TPP_WHATSAPP_STATUS = 'disconnected';
+            whatsappState.status = 'disconnected';
             console.error('❌ WhatsApp reconnect failed:', err?.message || err);
           }
-        }, Math.min(30000, 5000 * reconnectAttempts));
-      } else if (reconnectAttempts >= 5) {
+        }, delay);
+      } else if (reconnectAttempts >= 8) {
         global.__TPP_WHATSAPP_STATUS = 'retry_limit';
-        console.error('⏸️ WhatsApp reconnect limit reached. No Chromium restart loop is used.');
+        whatsappState.status = 'retry_limit';
+        console.error('⏸️ WhatsApp reconnect limit reached. Use the admin WhatsApp reset action to start a fresh QR session.');
       }
     }
   });
@@ -237,6 +263,42 @@ async function startWhatsApp() {
   }
 }
 
+async function resetWhatsAppAuth() {
+  manualStop = true;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = null;
+  reconnecting = false;
+  reconnectAttempts = 0;
+  global.__TPP_WHATSAPP_READY = false;
+  global.__TPP_WHATSAPP_STATUS = 'resetting';
+  whatsappState.ready = false;
+  whatsappState.status = 'resetting';
+  whatsappState.qrDataUrl = null;
+  whatsappState.qrCreatedAt = 0;
+  whatsappState.lastDisconnect = null;
+
+  try { await adapter?.close?.(); } catch {}
+  sock = null;
+  adapter = null;
+  setWhatsAppClient(null);
+
+  try {
+    if (mongo) {
+      const db = mongo.db(AUTH_DB_NAME);
+      await db.collection(AUTH_COLLECTION_NAME).drop().catch(err => {
+        if (err?.codeName !== 'NamespaceNotFound') throw err;
+      });
+    }
+  } finally {
+    try { await mongo?.close?.(); } catch {}
+    mongo = null;
+  }
+
+  manualStop = false;
+  await connectWhatsApp();
+  return true;
+}
+
 async function shutdown() {
   manualStop = true;
   clearTimeout(reconnectTimer);
@@ -259,5 +321,6 @@ async function shutdown() {
 
 module.exports = {
   startWhatsApp,
+  resetWhatsAppAuth,
   shutdown,
 };

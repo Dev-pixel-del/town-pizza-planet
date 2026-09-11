@@ -480,6 +480,17 @@ app.put('/api/templates', requireAuth, async(req,res)=>{await updateState(s=>{s.
 app.get('/api/audit', requireAuth,(req,res)=>res.json({success:true,logs:getState().auditLog.slice(0,200)}));
 app.get('/api/errors', requireAuth,(req,res)=>res.json({success:true,logs:getState().errorLog.slice(0,200)}));
 app.get('/api/system', requireAuth,(req,res)=>res.json({success:true,database:require('../db/database').getDatabaseMode(),whatsapp:{ready:global.__TPP_WHATSAPP_READY===true,status:global.__TPP_WHATSAPP_STATUS||'unknown'},uptime:process.uptime(),memory:process.memoryUsage(),node:process.version,cwd:process.cwd(),uploads:fs.existsSync(path.join(process.cwd(),'public','uploads'))}));
+app.post('/api/whatsapp/reset', requireAuth, async (req,res)=>{
+  try {
+    const { resetWhatsAppAuth } = require('../bot');
+    await resetWhatsAppAuth();
+    await appendAudit('whatsapp.auth_reset', { by: req.adminSession?.createdAt || null });
+    res.json({success:true,message:'WhatsApp authentication state cleared. A fresh QR should appear shortly.',status:whatsappState.status});
+  } catch (err) {
+    await appendError(err.message,{route:'/api/whatsapp/reset'});
+    res.status(500).json({success:false,error:'Could not reset WhatsApp authentication.'});
+  }
+});
 
 app.get('/api/backup', requireAuth,(req,res)=>{const backup={version:1,createdAt:new Date().toISOString(),orders:allOrders(),adminState:clone(getState())};res.setHeader('Content-Type','application/json');res.setHeader('Content-Disposition','attachment; filename="town-pizza-planet-backup.json"');res.send(JSON.stringify(backup,null,2));});
 app.post('/api/restore', requireAuth, async(req,res)=>{const b=req.body||{};if(!b.adminState||typeof b.adminState!=='object')return res.status(400).json({success:false,error:'Invalid backup'});await updateState(()=>b.adminState);await appendAudit('system.backup_restored',{createdAt:b.createdAt||null});res.json({success:true});});
@@ -507,7 +518,7 @@ app.get('/api/qr',(req,res)=>{
   res.setHeader('Cache-Control','no-store, no-cache, must-revalidate');
   const age = whatsappState.qrCreatedAt ? Date.now() - whatsappState.qrCreatedAt : Infinity;
   const freshQr = age <= 90000 ? whatsappState.qrDataUrl : null;
-  res.json({status:whatsappState.status || global.__TPP_WHATSAPP_STATUS || 'starting', ready:whatsappState.ready === true || global.__TPP_WHATSAPP_READY === true, qr:freshQr, qrAgeMs:Number.isFinite(age)?age:null});
+  res.json({status:whatsappState.status || global.__TPP_WHATSAPP_STATUS || 'starting', ready:whatsappState.ready === true || global.__TPP_WHATSAPP_READY === true, qr:freshQr, qrAgeMs:Number.isFinite(age)?age:null, lastDisconnect:whatsappState.lastDisconnect || null});
 });
 app.get('/api/qr.png',(req,res)=>{
   res.setHeader('Cache-Control','no-store, no-cache, must-revalidate');

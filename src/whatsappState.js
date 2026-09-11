@@ -5,4 +5,5 @@ module.exports = {
   qrDataUrl: null,
   qrCreatedAt: 0,
   userId: null,
+  lastDisconnect: null,
 };
