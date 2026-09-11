@@ -4,6 +4,7 @@ const QRCode = require('qrcode');
 const P = require('pino');
 const { MongoClient } = require('mongodb');
 const { setWhatsAppClient } = require('./admin/server');
+const whatsappState = require('./whatsappState');
 
 let makeWASocket;
 let DisconnectReason;
@@ -63,6 +64,8 @@ async function ensureLibraries() {
 function clearStatus() {
   global.__TPP_WHATSAPP_READY = false;
   global.__TPP_QR_DATA_URL = null;
+  whatsappState.ready = false;
+  whatsappState.status = 'starting';
 }
 
 async function openMongoAuth() {
@@ -113,12 +116,17 @@ async function connectWhatsApp() {
     if (qr) {
       global.__TPP_WHATSAPP_READY = false;
       global.__TPP_WHATSAPP_STATUS = 'awaiting_qr';
+      whatsappState.ready = false;
+      whatsappState.status = 'awaiting_qr';
       try {
         global.__TPP_QR_DATA_URL = await QRCode.toDataURL(qr, {
           width: 720,
           margin: 4,
           errorCorrectionLevel: 'H',
         });
+        whatsappState.qrDataUrl = global.__TPP_QR_DATA_URL;
+        whatsappState.qrCreatedAt = Date.now();
+        whatsappState.status = 'awaiting_qr';
         console.log('📱 WhatsApp QR ready. Open /qr on the restaurant device to scan.');
       } catch (err) {
         console.error('❌ QR generation failed:', err?.message || err);
@@ -130,16 +138,24 @@ async function connectWhatsApp() {
       global.__TPP_WHATSAPP_READY = true;
       global.__TPP_WHATSAPP_STATUS = 'ready';
       global.__TPP_QR_DATA_URL = null;
+      whatsappState.ready = true;
+      whatsappState.status = 'ready';
+      whatsappState.qrDataUrl = null;
+      whatsappState.qrCreatedAt = 0;
       const me = socket.user?.id || 'unknown';
       console.log(`✅ ${STORE_NAME} WhatsApp bot is LIVE as ${me}`);
     }
 
     if (connection === 'close') {
       global.__TPP_WHATSAPP_READY = false;
-      global.__TPP_QR_DATA_URL = null;
       const code = lastDisconnect?.error?.output?.statusCode ?? lastDisconnect?.error?.statusCode ?? 0;
       const loggedOut = code === DisconnectReason.loggedOut;
       global.__TPP_WHATSAPP_STATUS = loggedOut ? 'logged_out' : 'disconnected';
+      whatsappState.ready = false;
+      whatsappState.status = global.__TPP_WHATSAPP_STATUS;
+      // Keep the last QR briefly so the QR endpoint remains useful across
+      // transient connection events; the endpoint marks it stale after 90s.
+      if (loggedOut) { whatsappState.qrDataUrl = null; whatsappState.qrCreatedAt = 0; }
       console.error(`⚠️ WhatsApp connection closed. code=${code || 'unknown'}${loggedOut ? ' (logged out)' : ''}`);
 
       if (manualStop || loggedOut) {
@@ -206,6 +222,7 @@ async function connectWhatsApp() {
   });
 
   global.__TPP_WHATSAPP_STATUS = state.creds.registered ? 'connecting' : 'awaiting_qr';
+  whatsappState.status = global.__TPP_WHATSAPP_STATUS;
   return adapter;
 }
 
@@ -227,6 +244,10 @@ async function shutdown() {
   reconnecting = false;
   clearStatus();
   global.__TPP_WHATSAPP_STATUS = 'stopped';
+  whatsappState.status = 'stopped';
+  whatsappState.ready = false;
+  whatsappState.qrDataUrl = null;
+  whatsappState.qrCreatedAt = 0;
 
   try { await adapter?.close?.(); } catch {}
   try { await mongo?.close?.(); } catch {}
