@@ -65,35 +65,6 @@ async function sendPush(subscription, payload, ttl=90) {
   }
 }
 
-
-async function sendWebhookNotifier(payload) {
-  const url = String(process.env.WEBHOOK_NOTIFIER_URL || '').trim();
-  const secret = String(process.env.WEBHOOK_NOTIFIER_SECRET || '').trim();
-  if (!url || !secret) return { configured: false, sent: false };
-  if (!/^https:\/\//i.test(url)) throw new Error('WEBHOOK_NOTIFIER_URL must use HTTPS.');
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${secret}`,
-      },
-      body: JSON.stringify({
-        title: String(payload.title || '🚨 Town Pizza Planet — NEW ORDER'),
-        body: String(payload.body || 'A new order has arrived at Town Pizza Planet. Please open the Admin panel to accept or reject it.'),
-      }),
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`Webhook Notifier HTTP ${response.status}: ${text.slice(0, 300)}`);
-    return { configured: true, sent: true };
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function broadcast(payload, ttl=90) {
   const subs = [...(getState().pushSubscriptions || [])];
   let sent = 0;
@@ -133,20 +104,12 @@ async function createOrderAlert(order) {
   const createdAt = new Date(order.created_at || Date.now()).getTime();
   const deadlineAt = createdAt + ALERT_WINDOW_MS;
   await setAlert(order.order_id, { state: 'pending', createdAt: new Date(createdAt).toISOString(), deadlineAt: new Date(deadlineAt).toISOString(), acknowledgedAt: null, cancellationReason: null, lastPushAt: null });
-  const alertPayload = {
+  const sent = await broadcast({
     type: 'new-order', orderId: order.order_id, title: '🚨 NEW ORDER — TOWN PIZZA PLANET',
-    body: `${order.user_name || 'Customer'} • ₹${Number(order.total || 0).toLocaleString('en-IN')} • ${order.delivery_zone || 'Delivery'} • Please ACCEPT or REJECT`,
+    body: `${order.user_name || 'Customer'} • ₹${Number(order.total || 0).toLocaleString('en-IN')} • ${order.delivery_zone || 'Delivery'}`,
     url: `/admin/?order=${encodeURIComponent(order.order_id)}`,
     deadlineAt,
-  };
-  const sent = await broadcast(alertPayload, 60);
-  try {
-    const alarm = await sendWebhookNotifier({ title: alertPayload.title, body: `New order ${order.order_id} has arrived at Town Pizza Planet. ${order.user_name || 'Customer'} • ₹${Number(order.total || 0).toLocaleString('en-IN')}. Open Admin to ACCEPT or REJECT.` });
-    if (alarm.sent) await appendAudit('owner.webhook_notifier_sent', { orderId: order.order_id }, 'system');
-  } catch (err) {
-    console.error('⚠️ Webhook Notifier alert failed:', err?.message || err);
-    await appendError(err?.message || String(err), { task:'owner-webhook-notifier', orderId:order.order_id });
-  }
+  }, 60);
   await setAlert(order.order_id, { lastPushAt: new Date().toISOString(), lastPushSent: sent });
   return sent;
 }
@@ -259,13 +222,6 @@ async function testPush() {
   await ensureVapid();
   return broadcast({ type:'test', title:'🔔 Town Pizza Planet Alerts', body:'Order alert system is connected.', url:'/admin/' }, 60);
 }
-async function testWebhookNotifier() {
-  return sendWebhookNotifier({
-    title: '🚨 TOWN PIZZA PLANET — TEST ALARM',
-    body: 'This is a test from the Town Pizza Planet Admin alert system. If you heard your custom alarm, the webhook connection is working.',
-  });
-}
-
 async function initOwnerAlerts() {
   if (initialized) return;
   initialized = true;
@@ -275,4 +231,4 @@ async function initOwnerAlerts() {
   console.log('🔔 Owner order-alert engine ready (3-minute acknowledgement window).');
 }
 
-module.exports = { initOwnerAlerts, ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, testWebhookNotifier, createOrderAlert, acknowledgeOrder, rejectOrder, expirePendingOrders, alertView };
+module.exports = { initOwnerAlerts, ensureVapid, saveSubscription, getSubscriptionStatus, removeSubscription, testPush, createOrderAlert, acknowledgeOrder, rejectOrder, expirePendingOrders, alertView };
